@@ -1,0 +1,158 @@
+name: Node.js CI Reusable Workflow
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: 'Node.js version'
+        required: false
+        default: '18'
+        type: string
+      install-command:
+        description: 'Install dependencies command'
+        required: false
+        default: 'npm install'
+        type: string
+      build-command:
+        description: 'Build command'
+        required: false
+        default: ''
+        type: string
+      test-command:
+        description: 'Test command'
+        required: false
+        default: 'npm test'
+        type: string
+      run-npm-audit:
+        description: 'Run npm audit'
+        required: false
+        default: true
+        type: boolean
+      run-codeql:
+        description: 'Run CodeQL analysis'
+        required: false
+        default: true
+        type: boolean
+      run-dependency-review:
+        description: 'Run dependency review'
+        required: false
+        default: true
+        type: boolean
+      cloud-provider:
+        description: 'Cloud provider (azure|aws)'
+        required: false
+        default: ''
+        type: string
+      cloud-resource-type:
+        description: 'Cloud resource type (ex: appservice|lambda)'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Install dependencies
+        run: ${{ inputs.install-command }}
+
+      - name: Build
+        if: ${{ inputs.build-command != '' }}
+        run: ${{ inputs.build-command }}
+
+      - name: Test
+        run: ${{ inputs.test-command }}
+
+      - name: Save Test Results to Summary
+        if: always()
+        run: |
+          if [ -f test-results.xml ]; then
+            echo "## Test Results" >> $GITHUB_STEP_SUMMARY
+            cat test-results.xml >> $GITHUB_STEP_SUMMARY
+          elif [ -f coverage/lcov.info ]; then
+            echo "## Coverage lcov.info" >> $GITHUB_STEP_SUMMARY
+            cat coverage/lcov.info >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Nenhum arquivo de resultado de teste encontrado." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: NPM Audit
+        if: ${{ inputs.run-npm-audit == true }}
+        run: npm audit --audit-level=high || true
+
+      - name: Save NPM Audit to Summary
+        if: ${{ inputs.run-npm-audit == true }}
+        run: |
+          npm audit --json > audit.json || true
+          echo "## NPM Audit" >> $GITHUB_STEP_SUMMARY
+          cat audit.json >> $GITHUB_STEP_SUMMARY
+
+      - name: Dependency Review
+        if: ${{ inputs.run-dependency-review == true }}
+        uses: actions/dependency-review-action@v4
+
+      - name: Publish Build Artifact
+        if: always() && (hashFiles('dist/**') != '')
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifact
+          path: |
+            dist/
+            *.tgz
+
+  codeql:
+    if: ${{ inputs.run-codeql == true }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+  deploy:
+    needs: build
+    if: ${{ inputs.cloud-provider != '' && inputs.cloud-resource-type != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Build Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifact
+          path: ./artifact
+
+      - name: Deploy to Azure App Service
+        if: ${{ inputs.cloud-provider == 'azure' && inputs.cloud-resource-type == 'appservice' }}
+        run: |
+          echo "Deploying to Azure App Service..."
+          # Exemplo de comando de deploy (ajuste conforme necessário)
+          # az webapp deploy --resource-group <RG> --name <APP_NAME> --src-path ./artifact
+
+      - name: Deploy to AWS Lambda
+        if: ${{ inputs.cloud-provider == 'aws' && inputs.cloud-resource-type == 'lambda' }}
+        run: |
+          echo "Deploying to AWS Lambda..."
+          # Exemplo de comando de deploy (ajuste conforme necessário)
+          # aws lambda update-function-code --function-name <FUNCTION_NAME> --zip-file fileb://./artifact/<ZIP_FILE>
+
+      - name: Deploy - Not Implemented
+        if: ${{ !( (inputs.cloud-provider == 'azure' && inputs.cloud-resource-type == 'appservice') || (inputs.cloud-provider == 'aws' && inputs.cloud-resource-type == 'lambda') ) }}
+        run: |
+          echo "Deploy step for provider '${{ inputs.cloud-provider }}' and resource '${{ inputs.cloud-resource-type }}' not implemented."

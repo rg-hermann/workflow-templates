@@ -1,0 +1,24 @@
+name: Node.js CI Pipeline
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  node-ci:
+    uses: rg-hermann/workflow-templates/.github/workflows/ci-node.yaml@latest
+    with:
+      node-version: '18'
+      install-command: 'npm ci'
+      build-command: ''
+      test-command: 'npm test'
+      run-npm-audit: true
+      run-codeql: true
+      run-dependency-review: true
