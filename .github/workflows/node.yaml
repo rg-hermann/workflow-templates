@@ -38,6 +38,16 @@ on:
         required: false
         default: true
         type: boolean
+      cloud-provider:
+        description: 'Cloud provider (azure|aws)'
+        required: false
+        default: ''
+        type: string
+      cloud-resource-type:
+        description: 'Cloud resource type (ex: appservice|lambda)'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   actions: read
@@ -116,3 +126,33 @@ jobs:
         uses: github/codeql-action/autobuild@v3
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
+
+  deploy:
+    needs: build
+    if: ${{ inputs.cloud-provider != '' && inputs.cloud-resource-type != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Build Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifact
+          path: ./artifact
+
+      - name: Deploy to Azure App Service
+        if: ${{ inputs.cloud-provider == 'azure' && inputs.cloud-resource-type == 'appservice' }}
+        run: |
+          echo "Deploying to Azure App Service..."
+          # Exemplo de comando de deploy (ajuste conforme necessário)
+          # az webapp deploy --resource-group <RG> --name <APP_NAME> --src-path ./artifact
+
+      - name: Deploy to AWS Lambda
+        if: ${{ inputs.cloud-provider == 'aws' && inputs.cloud-resource-type == 'lambda' }}
+        run: |
+          echo "Deploying to AWS Lambda..."
+          # Exemplo de comando de deploy (ajuste conforme necessário)
+          # aws lambda update-function-code --function-name <FUNCTION_NAME> --zip-file fileb://./artifact/<ZIP_FILE>
+
+      - name: Deploy - Not Implemented
+        if: ${{ !( (inputs.cloud-provider == 'azure' && inputs.cloud-resource-type == 'appservice') || (inputs.cloud-provider == 'aws' && inputs.cloud-resource-type == 'lambda') ) }}
+        run: |
+          echo "Deploy step for provider '${{ inputs.cloud-provider }}' and resource '${{ inputs.cloud-resource-type }}' not implemented."
