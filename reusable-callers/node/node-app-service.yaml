@@ -1,0 +1,20 @@
+name: CI/CD Node.js App Service Example
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  call-node-app-service:
+    uses: rg-hermann/workflow-templates/.github/workflows/node-app-service.yaml@latest
+    with:
+      node-version: '22.x'
+      app-name: 'your-app-service-name'
+      slot-name: 'Production'
+      build-command: 'npm run build --if-present'
+      test-command: 'npm run test --if-present'
+      # client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID }}
+      # tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID }}
+      # subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID }}
