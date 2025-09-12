@@ -1,0 +1,27 @@
+name: Build and Deploy Python Function App
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    uses: ./.github/workflows/python_build_az_func.yaml
+    with:
+      python_version: '3.10'
+      requirements_file: 'requirements.txt'
+      test_folder: 'tests'
+    secrets:
+      AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+
+  deploy:
+    needs: build
+    uses: ./.github/workflows/python_deploy_az_func.yaml
+    with:
+      azure_function_app_name: 'meu-app-azure'
+      python_version: '3.10'
+      artifact-name: ${{ jobs.build.outputs.artifact-name }}
+      slot-name: 'Production'
+    secrets:
+      AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}

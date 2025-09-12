@@ -1,0 +1,68 @@
+name: Python Build Azure Function
+
+on:
+  workflow_call:
+    inputs:
+      python_version:
+        required: true
+        type: string
+        description: 'Python version to use for build and test'
+      requirements_file:
+        required: false
+        type: string
+        default: 'requirements.txt'
+        description: 'Path to requirements file'
+      test_folder:
+        required: false
+        type: string
+        default: 'tests'
+        description: 'Folder containing tests'
+    outputs:
+      artifact-name:
+        description: 'Name of the build artifact'
+        value: ${{ jobs.build.outputs.artifact-name }}
+    secrets:
+      AZURE_CREDENTIALS:
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      artifact-name: ${{ steps.set-artifact-name.outputs.artifact-name }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ inputs.python_version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r ${{ inputs.requirements_file }}
+
+      - name: Run tests
+        run: |
+          if [ -d "${{ inputs.test_folder }}" ]; then
+            pytest ${{ inputs.test_folder }}
+          else
+            echo "No tests found, skipping..."
+          fi
+
+      - name: Archive function app
+        run: |
+          zip -r functionapp.zip .
+        shell: bash
+
+      - name: Set artifact name
+        id: set-artifact-name
+        run: echo "artifact-name=functionapp.zip" >> $GITHUB_OUTPUT
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: functionapp
+          path: functionapp.zip
