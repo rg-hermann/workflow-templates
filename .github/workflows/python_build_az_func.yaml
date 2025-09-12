@@ -21,9 +21,6 @@ on:
       artifact-name:
         description: 'Name of the build artifact'
         value: ${{ jobs.build.outputs.artifact-name }}
-    secrets:
-      AZURE_CREDENTIALS:
-        required: true
 
 jobs:
   build:

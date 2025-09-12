@@ -21,9 +21,6 @@ on:
         type: string
         default: 'Production'
         description: 'Deployment slot name'
-    secrets:
-      AZURE_CREDENTIALS:
-        required: true
 
 jobs:
   deploy:
@@ -46,6 +43,41 @@ jobs:
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+          
+      - name: Ensure Azure Function App exists
+        run: |
+          LOCATION="brazilsouth"
+          APP_NAME="${{ inputs.azure_function_app_name }}"
+          STORAGE_NAME="${APP_NAME//-/}storage"
+          PLAN_NAME="${APP_NAME}-plan"
+          RESOURCE_GROUP="${APP_NAME}-rg"
+          # Check if Function App exists
+          if ! az functionapp show --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" &>/dev/null; then
+            echo "Function App $APP_NAME does not exist. Creating..."
+
+            # Create storage account if not exists
+            if ! az storage account show --name "$STORAGE_NAME" --resource-group "$RESOURCE_GROUP" &>/dev/null; then
+              az storage account create --name "$STORAGE_NAME" --location "$LOCATION" --resource-group "$RESOURCE_GROUP" --sku Standard_LRS
+            fi
+
+            # Create a consumption plan if not exists
+            if ! az functionapp plan show --name "$PLAN_NAME" --resource-group "$RESOURCE_GROUP" &>/dev/null; then
+              az functionapp plan create --name "$PLAN_NAME" --resource-group "$RESOURCE_GROUP" --location "$LOCATION" --sku Y1 --is-linux
+            fi
+
+            # Create the Function App
+            az functionapp create \
+              --name "$APP_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --plan "$PLAN_NAME" \
+              --storage-account "$STORAGE_NAME" \
+              --runtime python \
+              --runtime-version "${{ inputs.python_version }}" \
+              --os-type Linux \
+              --functions-version 4
+          else
+            echo "Function App $APP_NAME already exists."
+          fi
 
       - name: Deploy to Azure Function App
         uses: Azure/functions-action@v1
