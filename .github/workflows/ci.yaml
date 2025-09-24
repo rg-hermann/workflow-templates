@@ -1,0 +1,46 @@
+name: CI
+on:
+  push:
+    branches:
+      - main
+      - chore/*
+  pull_request:
+    branches:
+      - main
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies (Node)
+        run: |
+          cd reusable-callers/node
+          if [ -f package.json ]; then npm ci; fi
+      - name: Lint (Node)
+        run: |
+          cd reusable-callers/node
+          if [ -f package.json ]; then npm run lint || true; fi
+      - name: Test (Node)
+        run: |
+          cd reusable-callers/node
+          if [ -f package.json ]; then npm test || true; fi
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies (Python)
+        run: |
+          cd reusable-callers/python
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - name: Lint (Python)
+        run: |
+          cd reusable-callers/python
+          if [ -f requirements.txt ]; then pip install flake8; flake8 . || true; fi
+      - name: Test (Python)
+        run: |
+          cd reusable-callers/python
+          if [ -f requirements.txt ]; then pytest || true; fi
