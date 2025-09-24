@@ -3,7 +3,7 @@ on:
   push:
     branches:
       - main
-      - chore/automate-repo
+      - chore/*
   pull_request:
     branches:
       - main
