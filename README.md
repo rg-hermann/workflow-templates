@@ -123,6 +123,7 @@ OU configure OIDC com: `client-id`, `tenant-id`, `subscription-id` (Node App Ser
 - OIDC suportado em deploy de Function
 - Auditoria com nível configurável e opção de falhar build
 - Coverage opcional (Node e Python build)
+- Dependabot configurado para github-actions, npm e pip (limites e labels)
 
 ## Próximos Passos Possíveis
 

@@ -1,10 +1,32 @@
 version: 2
 updates:
+  # Atualizações de actions usadas nos workflows reutilizáveis e internos
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels: ["dependencies", "github-actions"]
+    open-pull-requests-limit: 5
+    rebase-strategy: auto
+
+  # Dependências Node de exemplos (callers) — baixa prioridade
   - package-ecosystem: "npm"
     directory: "/reusable-callers/node/"
     schedule:
       interval: "weekly"
+    labels: ["dependencies", "node"]
+    open-pull-requests-limit: 3
+
+  # Dependências Python de exemplos (callers)
   - package-ecosystem: "pip"
     directory: "/reusable-callers/python/"
     schedule:
       interval: "weekly"
+    labels: ["dependencies", "python"]
+    open-pull-requests-limit: 3
+
+  # (Opcional futuramente) Maven/Gradle se exemplos Java tiverem manifestos
+  # - package-ecosystem: "maven"
+  #   directory: "/reusable-callers/java/"
+  #   schedule:
+  #     interval: "weekly"
