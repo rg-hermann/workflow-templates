@@ -15,9 +15,10 @@ permissions:
   contents: read
 
 jobs:
-  actionlint:
-    name: Actionlint Validation
+  lint:
+    name: Actionlint & Sanity
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,9 +27,9 @@ jobs:
 
       - name: Run actionlint
         uses: docker://rhysd/actionlint:1.7.1
-        # Obs: considere fixar por digest SHA para segurança adicional.
+        # TODO: considerar pin por digest SHA.
 
-      - name: Extra checks (reusables precisam de workflow_call)
+      - name: Validar reusables possuem workflow_call
         shell: bash
         run: |
           set -euo pipefail
@@ -36,46 +37,53 @@ jobs:
           if [ -d "$DIR" ]; then
             MISSING=$(grep -L "workflow_call:" "$DIR"/*.yml "$DIR"/*.yaml 2>/dev/null || true)
             if [ -n "$MISSING" ]; then
-              printf '%s\n' "Workflows reutilizáveis sem 'on: workflow_call':" >&2
+              printf 'Workflows reutilizáveis sem on: workflow_call\n' >&2
               printf '%s\n' "$MISSING" >&2
               exit 1
             fi
           fi
-          echo "Todos os reusables possuem gatilho workflow_call" >> "$GITHUB_STEP_SUMMARY"
+          echo "Reusables OK (workflow_call presente)" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: YAML basic sanity
+      - name: Validar sintaxe YAML (PyYAML)
         shell: bash
         run: |
           set -euo pipefail
           echo "Validando parsing YAML via PyYAML" >> "$GITHUB_STEP_SUMMARY"
-          # Coleta de arquivos alvo
-          FILES=$(git ls-files '.github/workflows/*.yml' '.github/workflows/*.yaml' '.github/workflows/_reusable/*.yml' '.github/workflows/_reusable/*.yaml' 2>/dev/null || true)
-          if [ -z "$FILES" ]; then
+          mapfile -t FILES < <(git ls-files \
+            '.github/workflows/*.yml' \
+            '.github/workflows/*.yaml' \
+            '.github/workflows/_reusable/*.yml' \
+            '.github/workflows/_reusable/*.yaml' 2>/dev/null || true)
+          if [ "${#FILES[@]}" -eq 0 ]; then
             echo "Nenhum arquivo YAML encontrado para validar" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          pip install --quiet PyYAML >/dev/null 2>&1 || true
-          for f in $FILES; do
-            python - <<'PY' "$f"
-            import sys, yaml
-            path = sys.argv[1]
-            try:
-                with open(path, 'r', encoding='utf-8') as fh:
-                    yaml.safe_load(fh)
-            except Exception as e:
-                print(f"YAML inválido: {path}: {e}", file=sys.stderr)
-                sys.exit(1)
-            PY
-            echo "✔ $f" >> "$GITHUB_STEP_SUMMARY"
+            pip install --quiet PyYAML >/dev/null 2>&1 || true
+          FAIL=0
+          for f in "${FILES[@]}"; do
+            if python -c "import sys,yaml; yaml.safe_load(open('$f','r',encoding='utf-8'))" 2>err.log; then
+              echo "[OK] $f"
+              echo "✔ $f" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "[ERROR] $f" >&2
+              cat err.log >&2 || true
+              FAIL=1
+            fi
           done
+          rm -f err.log || true
+          if [ $FAIL -ne 0 ]; then
+            echo "Falha na validação de YAML" >&2
+            exit 1
+          fi
           echo "Validação básica de YAML concluída" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Summary
         if: always()
         shell: bash
         run: |
+          set -euo pipefail
           TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           {
             echo "### Resultado Lint Workflows";
-            echo "Actionlint & checks executados em $TS";
+            echo "Execução em $TS";
           } >> "$GITHUB_STEP_SUMMARY"

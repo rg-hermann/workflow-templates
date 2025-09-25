@@ -168,9 +168,11 @@ jobs:
 
           NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
           echo "Bump: $BUMP -> $NEW_VERSION" >&2
-          echo "new-version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
-          echo "last-tag=$LAST_TAG" >> "$GITHUB_OUTPUT"
-          echo "release-needed=true" >> "$GITHUB_OUTPUT"
+          {
+            echo "new-version=$NEW_VERSION";
+            echo "last-tag=$LAST_TAG";
+            echo "release-needed=true";
+          } >> "$GITHUB_OUTPUT"
 
           # Monta notas simples (pode ser refinado futuramente)
           NOTES_FILE=release_notes.md

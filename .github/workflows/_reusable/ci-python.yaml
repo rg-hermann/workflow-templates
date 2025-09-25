@@ -111,9 +111,14 @@ jobs:
             pip install --quiet pytest pytest-cov || true
             echo "Running with coverage"
             if [ "$TCMD" = 'pytest -q' ]; then
-              pytest -q ${{ inputs.coverage-args }} || EXIT=$?
+              COV_ARGS_RAW='${{ inputs.coverage-args }}'
+              # Split coverage args preserving quoted segments (basic split on spaces)
+              IFS=' ' read -r -a COV_ARR <<< "$COV_ARGS_RAW"
+              pytest -q "${COV_ARR[@]}" || EXIT=$?
             else
-              bash -c "$TCMD ${{ inputs.coverage-args }}" || EXIT=$?
+              COV_ARGS_RAW='${{ inputs.coverage-args }}'
+              IFS=' ' read -r -a COV_ARR <<< "$COV_ARGS_RAW"
+              bash -c "$TCMD ${COV_ARR[*]}" || EXIT=$?
             fi
           else
             bash -c "$TCMD" || EXIT=$?
