@@ -41,6 +41,11 @@ on:
         type: boolean
         default: false
         description: Skip creating resources (assume they exist)
+      minimal-cli-output:
+        required: false
+        type: boolean
+        default: true
+        description: Use --only-show-errors to reduce Azure CLI noise while keeping errors
 
 jobs:
   deploy:
@@ -78,17 +83,27 @@ jobs:
           STORAGE_NAME="${APP_NAME//-/}storage"
           PLAN_NAME="${APP_NAME}-plan"
           PLAN_SKU="${{ inputs.plan-sku }}"
+          # Decide CLI verbosity flags
+          if [ "${{ inputs.minimal-cli-output }}" = "true" ]; then
+            AZ_FLAGS="--only-show-errors"
+          else
+            AZ_FLAGS=""
+          fi
           echo "Using resource group: $RESOURCE_GROUP"
-          if ! az group show --name "$RESOURCE_GROUP" &>/dev/null; then
-            az group create --name "$RESOURCE_GROUP" --location "$LOCATION" 1>/dev/null
+          if ! az group show --name "$RESOURCE_GROUP" >/dev/null 2>&1; then
+            echo "Creating resource group $RESOURCE_GROUP"
+            az group create --name "$RESOURCE_GROUP" --location "$LOCATION" $AZ_FLAGS
           fi
-          if ! az storage account show --name "$STORAGE_NAME" --resource-group "$RESOURCE_GROUP" &>/dev/null; then
-            az storage account create --name "$STORAGE_NAME" --location "$LOCATION" --resource-group "$RESOURCE_GROUP" --sku Standard_LRS 1>/dev/null
+          if ! az storage account show --name "$STORAGE_NAME" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
+            echo "Creating storage account $STORAGE_NAME"
+            az storage account create --name "$STORAGE_NAME" --location "$LOCATION" --resource-group "$RESOURCE_GROUP" --sku Standard_LRS $AZ_FLAGS
           fi
-          if ! az functionapp plan show --name "$PLAN_NAME" --resource-group "$RESOURCE_GROUP" &>/dev/null; then
-            az functionapp plan create --name "$PLAN_NAME" --resource-group "$RESOURCE_GROUP" --location "$LOCATION" --sku "$PLAN_SKU" --is-linux 1>/dev/null
+          if ! az functionapp plan show --name "$PLAN_NAME" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
+            echo "Creating function plan $PLAN_NAME (SKU: $PLAN_SKU)"
+            az functionapp plan create --name "$PLAN_NAME" --resource-group "$RESOURCE_GROUP" --location "$LOCATION" --sku "$PLAN_SKU" --is-linux $AZ_FLAGS
           fi
-          if ! az functionapp show --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" &>/dev/null; then
+          if ! az functionapp show --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
+            echo "Creating function app $APP_NAME"
             az functionapp create \
               --name "$APP_NAME" \
               --resource-group "$RESOURCE_GROUP" \
@@ -97,7 +112,7 @@ jobs:
               --runtime python \
               --runtime-version "${{ inputs.python_version }}" \
               --os-type Linux \
-              --functions-version 4 1>/dev/null
+              --functions-version 4 $AZ_FLAGS
             echo "Created Function App $APP_NAME"
           else
             echo "Function App $APP_NAME already exists."
