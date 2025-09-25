@@ -51,14 +51,14 @@ jobs:
           pip install --quiet yq >/dev/null 2>&1 || true
           for f in $(git ls-files '.github/workflows/*.yml' '.github/workflows/*.yaml' '.github/workflows/_reusable/*.yml' '.github/workflows/_reusable/*.yaml' 2>/dev/null); do
             python - <<'PY'
-import sys, yaml, pathlib
-for path in sys.argv[1:]:
-    try:
-        yaml.safe_load(open(path))
-    except Exception as e:
-        print(f"YAML inválido: {path}: {e}", file=sys.stderr)
-        sys.exit(1)
-PY
+            import sys, yaml, pathlib
+            for path in sys.argv[1:]:
+                try:
+                    yaml.safe_load(open(path))
+                except Exception as e:
+                    print(f"YAML inválido: {path}: {e}", file=sys.stderr)
+                    sys.exit(1)
+            PY
             echo "✔ $f" >> $GITHUB_STEP_SUMMARY
           done
           echo "Validação básica de YAML concluída" >> $GITHUB_STEP_SUMMARY
