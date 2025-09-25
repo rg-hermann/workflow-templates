@@ -49,7 +49,7 @@ jobs:
           ci_ok=false
           require_count=${#WF_ARRAY[@]}
           attempt=1
-          while [ $attempt -le $MAX_ATTEMPTS ]; do
+          while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
             RESP=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H 'Accept: application/vnd.github+json' \
               "https://api.github.com/repos/$OWNER_REPO/actions/runs?head_sha=$SHA&event=push&per_page=100")
             # Para cada workflow requerido verificar se há um run completed success mais recente que não seja este
@@ -82,7 +82,7 @@ jobs:
               ci_ok=false
               break
             fi
-            if [ $success_count -ge $require_count ]; then
+            if [ "$success_count" -ge "$require_count" ]; then
               ci_ok=true
               echo "Todos os workflows requeridos concluídos com sucesso." >> "$GITHUB_STEP_SUMMARY"
               break
