@@ -125,6 +125,10 @@ OU configure OIDC com: `client-id`, `tenant-id`, `subscription-id` (Node App Ser
 - Coverage opcional (Node e Python build)
 - Dependabot configurado para github-actions, npm e pip (limites e labels)
 
+## Instruções do Copilot
+
+Consulte `.github/copilot-instructions.md` para padrões de contribuição e geração assistida de novos workflows.
+
 ## Próximos Passos Possíveis
 
 - Adicionar workflow de release semântico automático
