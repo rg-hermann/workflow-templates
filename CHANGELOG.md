@@ -6,7 +6,7 @@ O formato segue (inspirado em) Keep a Changelog e versionamento semântico.
 
 ## [Unreleased]
 ### Added
-- (placeholder)
+- Workflow de release semântico automático (`auto-release.yaml`).
 
 ## [1.0.0] - 2025-09-24
 ### Added

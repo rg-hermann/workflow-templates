@@ -1,0 +1,140 @@
+name: Auto Semantic Release
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+  # releases: write (implícito via contents para create-release action)
+
+concurrency:
+  group: auto-release-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine next version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+          # Última tag sem considerar 'latest'
+          LAST_TAG=$(git tag -l 'v[0-9]*' --sort=-v:refname | head -n1 || true)
+          if [ -z "$LAST_TAG" ]; then
+            LAST_TAG="v1.0.0"
+            BASE_VERSION="1.0.0"
+            echo "Nenhuma tag encontrada, iniciando em $LAST_TAG" >&2
+          else
+            BASE_VERSION=${LAST_TAG#v}
+          fi
+
+          # Commits desde a última tag
+          if git rev-parse "$LAST_TAG" >/dev/null 2>&1; then
+            RANGE="$LAST_TAG..HEAD"
+          else
+            RANGE="HEAD"
+          fi
+          COMMITS=$(git log --format=%s $RANGE || true)
+          if [ -z "$COMMITS" ]; then
+            echo "Nenhum commit novo desde $LAST_TAG. Abortando release." >&2
+            echo "release-needed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Commits considerados:\n$COMMITS" >&2
+
+          BUMP="patch"
+          if echo "$COMMITS" | grep -E '(BREAKING CHANGE|!:)' -q; then
+            BUMP="major"
+          elif echo "$COMMITS" | grep -E '^feat(\(|:)' -q; then
+            BUMP="minor"
+          elif echo "$COMMITS" | grep -E '^(fix|perf|refactor|chore|bug|hot|hotfix)(\(|:)' -q; then
+            BUMP="patch"
+          else
+            # Apenas docs / ci / style / test? Pode optar por não lançar.
+            if ! echo "$COMMITS" | grep -E '^(docs|ci|style|test|build)(\(|:)' -q; then
+              BUMP="patch"
+            else
+              echo "Somente mudanças não-release (docs/ci/style/test/build). Abortando." >&2
+              echo "release-needed=false" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+          fi
+
+          MAJOR=${BASE_VERSION%%.*}
+          REST=${BASE_VERSION#*.}
+          MINOR=${REST%%.*}
+            PATCH=${BASE_VERSION##*.}
+
+          case $BUMP in
+            major) MAJOR=$((MAJOR+1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR+1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH+1)) ;;
+          esac
+
+          NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+          echo "Bump: $BUMP -> $NEW_VERSION" >&2
+          echo "new-version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "last-tag=$LAST_TAG" >> $GITHUB_OUTPUT
+          echo "release-needed=true" >> $GITHUB_OUTPUT
+
+          # Monta notas simples (pode ser refinado futuramente)
+          NOTES_FILE=release_notes.md
+          {
+            echo "# Release $NEW_VERSION";
+            echo;
+            echo "Base: $LAST_TAG";
+            echo;
+            echo "## Commits";
+            git log --pretty='- %s (%h)' $RANGE;
+          } > $NOTES_FILE
+          echo "notes-file=$NOTES_FILE" >> $GITHUB_OUTPUT
+
+      - name: Create annotated tag & move latest
+        if: steps.version.outputs.release-needed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          NEW_VERSION='${{ steps.version.outputs.new-version }}'
+          # Cria tag se não existir (idempotência guard)
+          if git rev-parse "$NEW_VERSION" >/dev/null 2>&1; then
+            echo "Tag $NEW_VERSION já existe. Pulando criação." >&2
+          else
+            git tag -a "$NEW_VERSION" -m "Release $NEW_VERSION"
+          fi
+          # Atualiza/move latest
+          if git rev-parse latest >/dev/null 2>&1; then
+            git tag -d latest
+            git push origin :refs/tags/latest || true
+          fi
+          git tag -a latest -m "Alias para $NEW_VERSION"
+          git push origin "$NEW_VERSION"
+          git push origin latest
+
+      - name: Create GitHub Release
+        if: steps.version.outputs.release-needed == 'true'
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.version.outputs.new-version }}
+          release_name: ${{ steps.version.outputs.new-version }}
+          body_path: ${{ steps.version.outputs.notes-file }}
+          draft: false
+          prerelease: false
+
+      - name: Summary
+        if: steps.version.outputs.release-needed == 'true'
+        run: |
+          echo "Release criado: ${{ steps.version.outputs.new-version }}" >> $GITHUB_STEP_SUMMARY
+          echo "Última tag anterior: ${{ steps.version.outputs.last-tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "'latest' agora aponta para ${{ steps.version.outputs.new-version }}" >> $GITHUB_STEP_SUMMARY

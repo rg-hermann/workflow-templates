@@ -18,6 +18,24 @@ reusable-callers/         # Exemplos de uso chamando os reusables
 | `ci-node.yaml` | CI Node.js (install/build/test, coverage opcional, audit customizável, CodeQL, dependency review) | `node-version`, `package-manager`, `build-command`, `test-command`, `enable-coverage`, `run-codeql`, `run-npm-audit`, `audit-level` |
 | `ci-python.yaml` | CI Python (install, lint, test, pip-audit opcional) | `python-version`, `lint-command`, `test-command`, `run-pip-audit` |
 | `ci-java.yaml` | CI Java (Maven/Gradle, JUnit artifacts, JaCoCo opcional, dependency review, CodeQL opcional) | `java-version`, `build-tool`, `build-command`, `test-command`, `enable-coverage`, `run-codeql` |
+## Release Automático
+
+Um workflow interno (`auto-release.yaml`) gera versões semânticas automaticamente a cada push na `main`, baseado em mensagens de commit (ou títulos de merge commits) seguindo convenções semelhantes a Conventional Commits.
+
+Regra simplificada de bump:
+- `BREAKING CHANGE` ou `feat!:` -> major
+- `feat:` -> minor
+- `fix:`, `perf:`, `refactor:`, `chore:`, `bug:`, `hot:`, `hotfix:` -> patch
+- Apenas `docs:`, `ci:`, `style:`, `test:`, `build:` -> sem release
+
+Tags criadas:
+- `vX.Y.Z` (tag anotada)
+- `latest` (atualizada para apontar sempre para a versão liberada mais recente)
+
+Notas de release listam os commits desde a tag anterior. O `CHANGELOG.md` não é alterado automaticamente (evita loops de CI); futuras melhorias podem sincronizar.
+
+Para alterar regras, edite o script no step "Determine next version".
+
 | `node-app-service.yaml` | Build + deploy para Azure Web App (Node) | `app-name`, `slot-name`, `build-command` |
 | `python_build_az_func.yaml` | Build/empacota Azure Function Python (coverage opcional) | `python-version`, `requirements-file`, `enable-coverage` |
 | `python_deploy_az_func.yaml` | Deploy de Azure Function Python (cria recursos se faltando, suporta OIDC) | `azure-function-app-name`, `python-version`, `location`, `skip-resource-creation`, `client-id` |
