@@ -1,0 +1,211 @@
+name: Reusable Java CI
+
+on:
+  workflow_call:
+    inputs:
+      java-version:
+        type: string
+        required: false
+        default: '17'
+        description: Versão do Java
+      distribution:
+        type: string
+        required: false
+        default: 'temurin'
+        description: Distribuição (temurin, zulu, corretto, etc.)
+      build-tool:
+        type: string
+        required: false
+        default: 'maven'
+        description: Ferramenta de build (maven|gradle)
+      build-command:
+        type: string
+        required: false
+        default: ''
+        description: Comando de build (override – se vazio usa padrão por ferramenta)
+      test-command:
+        type: string
+        required: false
+        default: ''
+        description: Comando explícito de testes (se vazio confia no build)
+      enable-coverage:
+        type: boolean
+        required: false
+        default: true
+        description: Tenta capturar relatórios JaCoCo se presentes
+      run-codeql:
+        type: boolean
+        required: false
+        default: false
+        description: Ativa CodeQL (Java)
+      run-dependency-review:
+        type: boolean
+        required: false
+        default: true
+        description: Executa dependency-review em PRs
+      working-directory:
+        type: string
+        required: false
+        default: '.'
+        description: Caminho do projeto
+      timeout-minutes:
+        type: number
+        required: false
+        default: 20
+        description: Timeout do job
+      upload-junit:
+        type: boolean
+        required: false
+        default: true
+        description: Faz upload dos relatórios JUnit (surefire/test)
+      upload-coverage-artifact:
+        type: boolean
+        required: false
+        default: true
+        description: Publica artefato de coverage se encontrado
+    secrets:
+      CODEQL_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        id: setup-java
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ inputs.distribution }}
+          java-version: ${{ inputs.java-version }}
+          cache: ${{ inputs.build-tool == 'gradle' && 'gradle' || 'maven' }}
+
+      - name: Definir comandos padrão
+        id: cmds
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOOL='${{ inputs.build-tool }}'
+          BUILD='${{ inputs.build-command }}'
+          TEST='${{ inputs.test-command }}'
+          if [ "$TOOL" = 'maven' ]; then
+            : "${BUILD:=${BUILD:-mvn -B -ntp verify}}"
+            : "${TEST:=${TEST:-}}" # normalmente verify já roda testes
+          elif [ "$TOOL" = 'gradle' ]; then
+            if [ -x './gradlew' ]; then
+              : "${BUILD:=${BUILD:-./gradlew build}}"
+            else
+              : "${BUILD:=${BUILD:-gradle build}}"
+            fi
+            : "${TEST:=${TEST:-}}" # build inclui test
+          else
+            echo "Ferramenta desconhecida: $TOOL" >&2; exit 1
+          fi
+          echo "build=$BUILD" >> $GITHUB_OUTPUT
+          echo "test=$TEST" >> $GITHUB_OUTPUT
+          echo "Comando de build final: $BUILD" | tee -a $GITHUB_STEP_SUMMARY
+          if [ -n "$TEST" ]; then echo "Comando de test separado: $TEST" | tee -a $GITHUB_STEP_SUMMARY; fi
+
+      - name: Build
+        run: ${{ steps.cmds.outputs.build }}
+
+      - name: Test (separado)
+        if: ${{ steps.cmds.outputs.test != '' }}
+        run: ${{ steps.cmds.outputs.test }}
+
+      - name: Coletar relatórios JUnit
+        if: ${{ inputs.upload-junit }}
+        id: junit
+        shell: bash
+        run: |
+          set -euo pipefail
+            PATTERNS=(
+              '**/surefire-reports/*.xml'
+              '**/failsafe-reports/*.xml'
+              '**/test-results/test/*.xml'
+            )
+            FOUND=0
+            mkdir -p junit-report
+            for p in "${PATTERNS[@]}"; do
+              for f in $(compgen -G "$p" || true); do
+                cp "$f" junit-report/ || true
+                FOUND=1
+              done
+            done
+            if [ $FOUND -eq 1 ]; then
+              echo "found=true" >> $GITHUB_OUTPUT
+              echo "JUnit reports encontrados" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "found=false" >> $GITHUB_OUTPUT
+              echo "Nenhum JUnit report encontrado" >> $GITHUB_STEP_SUMMARY
+            fi
+
+      - name: Upload JUnit reports
+        if: ${{ inputs.upload-junit && steps.junit.outputs.found == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-reports
+          path: junit-report
+          if-no-files-found: ignore
+
+      - name: Detectar cobertura (JaCoCo)
+        if: ${{ inputs.enable-coverage }}
+        id: coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Possíveis localizações padrão
+          FILES=$(compgen -G '**/jacoco*.xml' || true)
+          if [ -z "$FILES" ]; then
+            FILES=$(compgen -G '**/reports/jacoco/test/jacocoTestReport.xml' || true)
+          fi
+          if [ -n "$FILES" ]; then
+            mkdir -p coverage
+            for f in $FILES; do cp "$f" coverage/ || true; done
+            echo "found=true" >> $GITHUB_OUTPUT
+            echo "Coverage (JaCoCo) encontrado" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+            echo "Nenhum relatório JaCoCo encontrado" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload coverage artifact
+        if: ${{ inputs.enable-coverage && inputs.upload-coverage-artifact && steps.coverage.outputs.found == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-coverage
+          path: coverage
+          if-no-files-found: ignore
+
+      - name: Dependency Review
+        if: ${{ inputs.run-dependency-review && github.event_name == 'pull_request' }}
+        uses: actions/dependency-review-action@v4
+
+  codeql:
+    if: ${{ inputs.run-codeql }}
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Init CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: java
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3

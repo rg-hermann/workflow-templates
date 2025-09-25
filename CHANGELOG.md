@@ -6,6 +6,10 @@ O formato segue (inspirado em) Keep a Changelog e versionamento semântico.
 
 ## [Unreleased]
 ### Added
+- (placeholder)
+
+## [1.0.0] - 2025-09-24
+### Added
 - Composite action Node CI (`.github/actions/node-ci`).
 - Inputs avançados no `ci-node.yaml` (coverage, audit-level, fail-on-audit, package-manager, timeout-minutes).
 - Inputs avançados no `ci-python.yaml` (coverage, pip-audit-level, fail-on-audit, timeout-minutes).
@@ -13,6 +17,7 @@ O formato segue (inspirado em) Keep a Changelog e versionamento semântico.
 - Concurrency + slot canário opcional em `node-app-service.yaml`.
 - Simplificação e contextualização do `.gitignore`.
 - Artefatos de coverage e audit (Python) opcionais.
+- Novo workflow `ci-java.yaml` (Maven/Gradle, JUnit, JaCoCo, dependency review, CodeQL opcional).
 
 ### Changed
 - Padronização de inputs para kebab-case em workflows Python build/deploy.

@@ -17,6 +17,7 @@ reusable-callers/         # Exemplos de uso chamando os reusables
 |----------|-----------|------------------|
 | `ci-node.yaml` | CI Node.js (install/build/test, coverage opcional, audit customizável, CodeQL, dependency review) | `node-version`, `package-manager`, `build-command`, `test-command`, `enable-coverage`, `run-codeql`, `run-npm-audit`, `audit-level` |
 | `ci-python.yaml` | CI Python (install, lint, test, pip-audit opcional) | `python-version`, `lint-command`, `test-command`, `run-pip-audit` |
+| `ci-java.yaml` | CI Java (Maven/Gradle, JUnit artifacts, JaCoCo opcional, dependency review, CodeQL opcional) | `java-version`, `build-tool`, `build-command`, `test-command`, `enable-coverage`, `run-codeql` |
 | `node-app-service.yaml` | Build + deploy para Azure Web App (Node) | `app-name`, `slot-name`, `build-command` |
 | `python_build_az_func.yaml` | Build/empacota Azure Function Python (coverage opcional) | `python-version`, `requirements-file`, `enable-coverage` |
 | `python_deploy_az_func.yaml` | Deploy de Azure Function Python (cria recursos se faltando, suporta OIDC) | `azure-function-app-name`, `python-version`, `location`, `skip-resource-creation`, `client-id` |
