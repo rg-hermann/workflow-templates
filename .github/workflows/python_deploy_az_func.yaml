@@ -21,10 +21,38 @@ on:
         type: string
         default: 'Production'
         description: 'Deployment slot name'
+      location:
+        required: false
+        type: string
+        default: 'brazilsouth'
+        description: Azure region for resource creation
+      resource-group:
+        required: false
+        type: string
+        default: ''
+        description: Optional explicit resource group (defaults to <app>-rg)
+      plan-sku:
+        required: false
+        type: string
+        default: 'Y1'
+        description: App Service plan SKU (Y1 = Consumption)
+      skip-resource-creation:
+        required: false
+        type: boolean
+        default: false
+        description: Skip creating resources (assume they exist)
+      minimal-cli-output:
+        required: false
+        type: boolean
+        default: true
+        description: Use --only-show-errors to reduce Azure CLI noise while keeping errors
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-${{ inputs.azure_function_app_name }}-${{ inputs.slot-name }}
+      cancel-in-progress: true
     steps:
       - name: Download build artifact
         uses: actions/download-artifact@v4
@@ -45,27 +73,37 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
           
       - name: Ensure Azure Function App exists
+        if: ${{ inputs.skip-resource-creation == false }}
         run: |
-          LOCATION="brazilsouth"
+          set -e
+          LOCATION="${{ inputs.location }}"
           APP_NAME="${{ inputs.azure_function_app_name }}"
+          RESOURCE_GROUP_INPUT="${{ inputs.resource-group }}"
+          RESOURCE_GROUP=${RESOURCE_GROUP_INPUT:-"${APP_NAME}-rg"}
           STORAGE_NAME="${APP_NAME//-/}storage"
           PLAN_NAME="${APP_NAME}-plan"
-          RESOURCE_GROUP="${APP_NAME}-rg"
-          # Check if Function App exists
-          if ! az functionapp show --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" &>/dev/null; then
-            echo "Function App $APP_NAME does not exist. Creating..."
-
-            # Create storage account if not exists
-            if ! az storage account show --name "$STORAGE_NAME" --resource-group "$RESOURCE_GROUP" &>/dev/null; then
-              az storage account create --name "$STORAGE_NAME" --location "$LOCATION" --resource-group "$RESOURCE_GROUP" --sku Standard_LRS
-            fi
-
-            # Create a consumption plan if not exists
-            if ! az functionapp plan show --name "$PLAN_NAME" --resource-group "$RESOURCE_GROUP" &>/dev/null; then
-              az functionapp plan create --name "$PLAN_NAME" --resource-group "$RESOURCE_GROUP" --location "$LOCATION" --sku Y1 --is-linux
-            fi
-
-            # Create the Function App
+          PLAN_SKU="${{ inputs.plan-sku }}"
+          # Decide CLI verbosity flags
+          if [ "${{ inputs.minimal-cli-output }}" = "true" ]; then
+            AZ_FLAGS="--only-show-errors"
+          else
+            AZ_FLAGS=""
+          fi
+          echo "Using resource group: $RESOURCE_GROUP"
+          if ! az group show --name "$RESOURCE_GROUP" >/dev/null 2>&1; then
+            echo "Creating resource group $RESOURCE_GROUP"
+            az group create --name "$RESOURCE_GROUP" --location "$LOCATION" $AZ_FLAGS
+          fi
+          if ! az storage account show --name "$STORAGE_NAME" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
+            echo "Creating storage account $STORAGE_NAME"
+            az storage account create --name "$STORAGE_NAME" --location "$LOCATION" --resource-group "$RESOURCE_GROUP" --sku Standard_LRS $AZ_FLAGS
+          fi
+          if ! az functionapp plan show --name "$PLAN_NAME" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
+            echo "Creating function plan $PLAN_NAME (SKU: $PLAN_SKU)"
+            az functionapp plan create --name "$PLAN_NAME" --resource-group "$RESOURCE_GROUP" --location "$LOCATION" --sku "$PLAN_SKU" --is-linux $AZ_FLAGS
+          fi
+          if ! az functionapp show --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
+            echo "Creating function app $APP_NAME"
             az functionapp create \
               --name "$APP_NAME" \
               --resource-group "$RESOURCE_GROUP" \
@@ -74,7 +112,8 @@ jobs:
               --runtime python \
               --runtime-version "${{ inputs.python_version }}" \
               --os-type Linux \
-              --functions-version 4
+              --functions-version 4 $AZ_FLAGS
+            echo "Created Function App $APP_NAME"
           else
             echo "Function App $APP_NAME already exists."
           fi

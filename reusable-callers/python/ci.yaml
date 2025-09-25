@@ -1,0 +1,17 @@
+name: Example Python CI Caller
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  python-ci:
+    uses: rg-hermann/workflow-templates/.github/workflows/ci-python.yaml@main
+    with:
+      python-version: '3.11'
+      lint-command: 'flake8 .'    # pode deixar vazio para pular
+      test-command: 'pytest -q'   # pode deixar vazio para pular
+      run-pip-audit: true
+    secrets: inherit

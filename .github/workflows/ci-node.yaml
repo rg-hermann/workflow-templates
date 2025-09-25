@@ -1,0 +1,110 @@
+name: Reusable Node.js CI
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        type: string
+        required: false
+        default: '20'
+        description: Node.js version
+      install-command:
+        type: string
+        required: false
+        default: 'npm ci'
+        description: Command to install dependencies
+      build-command:
+        type: string
+        required: false
+        default: ''
+        description: Optional build command (leave empty to skip)
+      test-command:
+        type: string
+        required: false
+        default: 'npm test'
+        description: Test command
+      run-npm-audit:
+        type: boolean
+        required: false
+        default: false
+        description: Run npm audit --audit-level=high
+      run-codeql:
+        type: boolean
+        required: false
+        default: false
+        description: Enable GitHub CodeQL analysis (JavaScript)
+      run-dependency-review:
+        type: boolean
+        required: false
+        default: true
+        description: Run dependency review on pull requests
+      working-directory:
+        type: string
+        required: false
+        default: '.'
+        description: Path to Node.js project
+    secrets:
+      CODEQL_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ inputs.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: 'npm'
+          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+
+      - name: Install dependencies
+        if: ${{ inputs.install-command != '' }}
+        run: ${{ inputs.install-command }}
+
+      - name: Build
+        if: ${{ inputs.build-command != '' }}
+        run: ${{ inputs.build-command }}
+
+      - name: Run tests
+        if: ${{ inputs.test-command != '' }}
+        run: ${{ inputs.test-command }}
+
+      - name: npm audit (high severity)
+        if: ${{ inputs.run-npm-audit }}
+        run: |
+          npm audit --audit-level=high || true
+
+      - name: Dependency Review
+        if: ${{ inputs.run-dependency-review && github.event_name == 'pull_request' }}
+        uses: actions/dependency-review-action@v4
+
+  codeql:
+    if: ${{ inputs.run-codeql }}
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
