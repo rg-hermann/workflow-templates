@@ -15,11 +15,11 @@ reusable-callers/         # Exemplos de uso chamando os reusables
 
 | Workflow | Descrição | Principais Inputs |
 |----------|-----------|------------------|
-| `ci-node.yaml` | CI Node.js (install/build/test + opcional audit, CodeQL, dependency review) | `node-version`, `build-command`, `test-command`, `run-codeql` |
+| `ci-node.yaml` | CI Node.js (install/build/test, coverage opcional, audit customizável, CodeQL, dependency review) | `node-version`, `package-manager`, `build-command`, `test-command`, `enable-coverage`, `run-codeql`, `run-npm-audit`, `audit-level` |
 | `ci-python.yaml` | CI Python (install, lint, test, pip-audit opcional) | `python-version`, `lint-command`, `test-command`, `run-pip-audit` |
 | `node-app-service.yaml` | Build + deploy para Azure Web App (Node) | `app-name`, `slot-name`, `build-command` |
-| `python_build_az_func.yaml` | Build/empacota Azure Function Python | `python_version`, `requirements_file` |
-| `python_deploy_az_func.yaml` | Deploy de Azure Function Python (cria recursos se faltando) | `azure_function_app_name`, `python_version`, `location`, `skip-resource-creation` |
+| `python_build_az_func.yaml` | Build/empacota Azure Function Python (coverage opcional) | `python-version`, `requirements-file`, `enable-coverage` |
+| `python_deploy_az_func.yaml` | Deploy de Azure Function Python (cria recursos se faltando, suporta OIDC) | `azure-function-app-name`, `python-version`, `location`, `skip-resource-creation`, `client-id` |
 
 ## Como Consumir
 
@@ -64,15 +64,15 @@ jobs:
 	build:
 		uses: rg-hermann/workflow-templates/.github/workflows/python_build_az_func.yaml@main
 		with:
-			python_version: '3.11'
+			python-version: '3.11'
 		secrets: inherit
 
 	deploy:
 		needs: build
 		uses: rg-hermann/workflow-templates/.github/workflows/python_deploy_az_func.yaml@main
 		with:
-			azure_function_app_name: my-func-app
-			python_version: '3.11'
+			azure-function-app-name: my-func-app
+			python-version: '3.11'
 			artifact-name: functionapp.zip
 		secrets: inherit
 ```
@@ -83,17 +83,21 @@ jobs:
 |------|-----|
 | `AZURE_CREDENTIALS` | Login via Service Principal (json) para deploys Azure |
 
-OU configure OIDC com: `client-id`, `tenant-id`, `subscription-id` como inputs (Node App Service). Garanta a role adequada (ex: `Contributor` + `User Access Administrator` quando preciso).
+OU configure OIDC com: `client-id`, `tenant-id`, `subscription-id` (Node App Service e Python Function deploy). Garanta a role adequada (ex: `Contributor` + `User Access Administrator` quando preciso).
 
 ## Boas Práticas Implementadas
 
 - Cache de dependências (`actions/setup-node` e pip cache)
+- Composite action interna para Node (`.github/actions/node-ci`)
 - Steps opcionais controlados por inputs (segurança/performance)
 - `dependency-review-action` em PRs (Node)
 - CodeQL opcional
 - `pip-audit` / `npm audit` opcionais
 - Concurrency em deploy de Function para evitar corrida
 - Parametrização de região e grupo de recurso
+- OIDC suportado em deploy de Function
+- Auditoria com nível configurável e opção de falhar build
+- Coverage opcional (Node e Python build)
 
 ## Próximos Passos Possíveis
 
@@ -101,10 +105,16 @@ OU configure OIDC com: `client-id`, `tenant-id`, `subscription-id` como inputs (
 - Publicar composite actions para trechos repetidos
 - Adicionar suporte a matrix (ex: múltiplas versões de Node/Python)
 - Incluir scan SAST adicional (Trivy, etc.)
+- Publicar SARIF de pip-audit e npm audit
+- Adicionar testes de smoke pós-deploy
 
 ## Licença
 
 Uso pessoal – adicione uma licença se for compartilhar publicamente.
+
+## Changelog & Segurança
+
+Veja `CHANGELOG.md` para histórico de mudanças e `SECURITY.md` para política de segurança.
 
 ---
 Sinta-se livre para abrir issues ou enviar PRs com melhorias.

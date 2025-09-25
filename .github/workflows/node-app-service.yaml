@@ -14,6 +14,16 @@ on:
         required: false
         type: string
         default: 'Production'
+      use-staging-slot:
+        required: false
+        type: boolean
+        default: false
+        description: 'Deploy to a staging slot then swap to production'
+      staging-slot-name:
+        required: false
+        type: string
+        default: 'staging'
+        description: 'Name of staging slot (when use-staging-slot=true)'
       build-command:
         required: false
         type: string
@@ -41,6 +51,11 @@ on:
         type: string
         default: 'node-app'
         description: Artifact name for build output
+      timeout-minutes:
+        required: false
+        type: number
+        default: 25
+        description: 'Timeout for build or deploy job'
     secrets:
       AZURE_CREDENTIALS:
         required: false
@@ -48,6 +63,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
     permissions:
       contents: read
 
@@ -55,24 +71,11 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Node.js version
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node-version }}
           cache: 'npm'
           cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
-
-      - name: Get npm cache directory
-        id: npm-cache-dir
-        shell: bash
-        run: echo "dir=$(npm config get cache)" >> ${GITHUB_OUTPUT}
-
-      - uses: actions/cache@v4
-        id: npm-cache
-        with:
-          path: ${{ steps.npm-cache-dir.outputs.dir }}
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
 
       - name: Install dependencies
         working-directory: ${{ inputs.working-directory }}
@@ -100,10 +103,14 @@ jobs:
 
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
     needs: build
     permissions:
       id-token: write
       contents: read
+    concurrency:
+      group: webapp-${{ inputs.app-name }}-${{ inputs.slot-name }}
+      cancel-in-progress: true
 
     steps:
       - name: Download artifact from build job
@@ -132,5 +139,11 @@ jobs:
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ inputs.app-name }}
-          slot-name: ${{ inputs.slot-name }}
+          slot-name: ${{ inputs.use-staging-slot && inputs.staging-slot-name || inputs.slot-name }}
           package: .
+      - name: Swap slot to production
+        if: ${{ inputs.use-staging-slot }}
+        run: |
+          set -euo pipefail
+          az webapp deployment slot swap --name "${{ inputs.app-name }}" --resource-group $(az webapp show --name "${{ inputs.app-name }}" --query resourceGroup -o tsv) --slot "${{ inputs.staging-slot-name }}" --target-slot "Production" --action swap
+          echo "Slot swap completed" >> $GITHUB_STEP_SUMMARY

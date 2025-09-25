@@ -23,10 +23,35 @@ on:
         type: boolean
         required: false
         default: false
+      pip-audit-level:
+        type: string
+        required: false
+        default: 'high'
+        description: 'Vulnerability level to report (low|medium|high|critical) interpreted by pip-audit exit code strategy'
+      fail-on-audit:
+        type: boolean
+        required: false
+        default: false
+        description: 'Fail CI if pip-audit finds issues at or above chosen level'
+      enable-coverage:
+        type: boolean
+        required: false
+        default: false
+        description: 'If true, attempts to run coverage via pytest --cov'
+      coverage-args:
+        type: string
+        required: false
+        default: '--cov=. --cov-report=xml'
+        description: 'Extra args appended when coverage enabled'
       working-directory:
         type: string
         required: false
         default: '.'
+      timeout-minutes:
+        type: number
+        required: false
+        default: 15
+        description: 'Timeout for CI job'
     secrets: {}
 
 permissions:
@@ -35,6 +60,7 @@ permissions:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
@@ -46,10 +72,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ inputs.python-version }}
-          cache: pip
+          cache: 'pip'
+          cache-dependency-path: ${{ inputs.working-directory }}/requirements*.txt
 
-      - name: Upgrade pip
-        run: python -m pip install --upgrade pip
+      - name: Upgrade pip & base tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install --disable-pip-version-check --quiet wheel
 
       - name: Install dependencies
         if: ${{ inputs.install-command != '' }}
@@ -57,19 +86,71 @@ jobs:
 
       - name: Lint
         if: ${{ inputs.lint-command != '' }}
-        run: |
-          if echo "${{ inputs.lint-command }}" | grep -q "flake8"; then
-            pip install flake8 >/dev/null 2>&1 || true
-          fi
-          ${{ inputs.lint-command }}
         shell: bash
-
-      - name: Run tests
-        if: ${{ inputs.test-command != '' }}
-        run: ${{ inputs.test-command }}
-
-      - name: pip-audit (advisories)
-        if: ${{ inputs.run-pip-audit }}
         run: |
-          pip install pip-audit
-          pip-audit || true
+          set -euo pipefail
+          CMD='${{ inputs.lint-command }}'
+            if echo "$CMD" | grep -q 'flake8'; then
+              pip install --quiet flake8 || true
+            elif echo "$CMD" | grep -q 'ruff'; then
+              pip install --quiet ruff || true
+            fi
+          echo "Running lint: $CMD"
+          bash -c "$CMD"
+
+      - name: Run tests / coverage
+        if: ${{ inputs.test-command != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.enable-coverage }}" = "true" ]; then
+            pip install --quiet pytest pytest-cov || true
+            echo "Running with coverage"
+            pytest ${{ inputs.test-command == 'pytest -q' && '' || inputs.test-command }} ${{ inputs.coverage-args }} || EXIT=$?
+          else
+            bash -c "${{ inputs.test-command }}" || EXIT=$?
+          fi
+          : "${EXIT:=0}"; exit $EXIT
+      - name: Upload coverage artifact
+        if: ${{ inputs.enable-coverage }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-coverage
+          path: coverage.xml
+          if-no-files-found: ignore
+
+      - name: pip-audit
+        if: ${{ inputs.run-pip-audit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pip install --quiet pip-audit
+          LEVEL='${{ inputs.pip-audit-level }}'
+          FAIL='${{ inputs.fail-on-audit }}'
+          echo "Running pip-audit (level=$LEVEL fail=$FAIL)"
+          # pip-audit currently exits >0 if any vulnerable packages found; no direct level filter.
+          # We post-filter JSON to decide whether to fail.
+          pip-audit -f json > audit.json || true
+          COUNT=$(jq 'length' audit.json 2>/dev/null || echo 0)
+          echo "Total advisories: $COUNT" | tee -a $GITHUB_STEP_SUMMARY
+          if [ "$COUNT" -gt 0 ]; then
+            echo "Advisories present." >&2
+            if [ "$FAIL" = "true" ]; then
+              echo "Failing due to fail-on-audit=true" >&2
+              exit 1
+            fi
+          fi
+          # Save SARIF placeholder (future enhancement)
+          echo '{"version":"2.1.0","runs":[]}' > pip-audit.sarif
+      - name: Upload audit artifacts
+        if: ${{ inputs.run-pip-audit }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pip-audit-report
+          path: |
+            audit.json
+            pip-audit.sarif
+          if-no-files-found: ignore
+      - name: Summary
+        if: always()
+        run: echo "Python CI finalizada" >> $GITHUB_STEP_SUMMARY

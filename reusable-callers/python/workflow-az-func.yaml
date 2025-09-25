@@ -9,14 +9,14 @@ jobs:
   build:
     uses: rg-hermann/workflow-templates/.github/workflows/python_build_az_func.yaml@latest
     with:
-      python_version: '3.10'
+      python-version: '3.10'
     secrets: inherit
 
   deploy:
     needs: build
     uses: rg-hermann/workflow-templates/.github/workflows/python_deploy_az_func.yaml@latest
     with:
-      azure_function_app_name: ${{ github.event.repository.name }}
-      python_version: '3.10'
+      azure-function-app-name: ${{ github.event.repository.name }}
+      python-version: '3.10'
       artifact-name: ${{ jobs.build.outputs.artifact-name }}
     secrets: inherit

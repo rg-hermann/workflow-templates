@@ -8,6 +8,11 @@ on:
         required: false
         default: '20'
         description: Node.js version
+      package-manager:
+        type: string
+        required: false
+        default: 'npm'
+        description: Package manager (npm|yarn|pnpm)
       install-command:
         type: string
         required: false
@@ -23,11 +28,31 @@ on:
         required: false
         default: 'npm test'
         description: Test command
+      enable-coverage:
+        type: boolean
+        required: false
+        default: false
+        description: Run coverage (uses coverage-command if provided)
+      coverage-command:
+        type: string
+        required: false
+        default: ''
+        description: Explicit coverage command (overrides test-command when enable-coverage)
       run-npm-audit:
         type: boolean
         required: false
         default: false
         description: Run npm audit --audit-level=high
+      audit-level:
+        type: string
+        required: false
+        default: 'high'
+        description: Audit level (low|moderate|high|critical)
+      fail-on-audit:
+        type: boolean
+        required: false
+        default: false
+        description: Fail build on audit issues >= level
       run-codeql:
         type: boolean
         required: false
@@ -43,47 +68,69 @@ on:
         required: false
         default: '.'
         description: Path to Node.js project
+      timeout-minutes:
+        type: number
+        required: false
+        default: 15
+        description: Job timeout (minutes)
     secrets:
       CODEQL_TOKEN:
         required: false
 
 permissions:
   contents: read
-  security-events: write
 
 jobs:
   ci:
     runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Use Node.js ${{ inputs.node-version }}
-        uses: actions/setup-node@v4
+      - name: Core build & test
+        uses: ./.github/actions/node-ci
         with:
           node-version: ${{ inputs.node-version }}
-          cache: 'npm'
-          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
-
-      - name: Install dependencies
-        if: ${{ inputs.install-command != '' }}
-        run: ${{ inputs.install-command }}
-
-      - name: Build
-        if: ${{ inputs.build-command != '' }}
-        run: ${{ inputs.build-command }}
-
-      - name: Run tests
-        if: ${{ inputs.test-command != '' }}
-        run: ${{ inputs.test-command }}
+          package-manager: ${{ inputs.package-manager }}
+          working-directory: ${{ inputs.working-directory }}
+          install-command: ${{ inputs.install-command }}
+          build-command: ${{ inputs.build-command }}
+          test-command: ${{ inputs.test-command }}
+          enable-coverage: ${{ inputs.enable-coverage }}
+          coverage-command: ${{ inputs.coverage-command }}
 
       - name: npm audit (high severity)
         if: ${{ inputs.run-npm-audit }}
         run: |
-          npm audit --audit-level=high || true
+          set -euo pipefail
+          PM=${{ inputs.package-manager }}
+          LEVEL=${{ inputs.audit-level }}
+          FAIL=${{ inputs.fail-on-audit }}
+          echo "Running audit with $PM --audit-level=$LEVEL (fail=$FAIL)"
+          if [ "$PM" = "npm" ]; then
+            CMD="npm audit --audit-level=$LEVEL"
+          elif [ "$PM" = "yarn" ]; then
+            CMD="yarn audit --level $LEVEL"
+          elif [ "$PM" = "pnpm" ]; then
+            CMD="pnpm audit --audit-level $LEVEL"
+          else
+            echo "Unknown package manager $PM, skipping audit"; exit 0
+          fi
+          set +e
+          $CMD
+          CODE=$?
+          set -e
+          if [ $CODE -ne 0 ]; then
+            if [ "$FAIL" = "true" ]; then
+              echo "Audit failed (exit $CODE) and fail-on-audit=true" >&2
+              exit $CODE
+            else
+              echo "Audit found issues but not failing build (fail-on-audit=false)" >&2
+            fi
+          fi
 
       - name: Dependency Review
         if: ${{ inputs.run-dependency-review && github.event_name == 'pull_request' }}

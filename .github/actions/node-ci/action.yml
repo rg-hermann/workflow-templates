@@ -1,0 +1,71 @@
+name: Node Core CI
+description: Install, build, test, and optional coverage for Node.js projects
+inputs:
+  node-version:
+    required: true
+    description: Node.js version
+  package-manager:
+    required: false
+    default: npm
+  working-directory:
+    required: false
+    default: '.'
+  install-command:
+    required: false
+    default: ''
+  build-command:
+    required: false
+    default: ''
+  test-command:
+    required: false
+    default: ''
+  enable-coverage:
+    required: false
+    default: 'false'
+  coverage-command:
+    required: false
+    default: ''
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: ${{ inputs.package-manager == 'npm' && 'npm' || inputs.package-manager == 'pnpm' && 'pnpm' || inputs.package-manager == 'yarn' && 'yarn' || '' }}
+        cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+    - name: Ensure package manager install
+      shell: bash
+      run: |
+        set -euo pipefail
+        PM="${{ inputs.package-manager }}"
+        if [ "$PM" = "pnpm" ]; then npm install -g pnpm@latest; fi
+        if [ "$PM" = "yarn" ]; then corepack enable; corepack prepare yarn@stable --activate; fi
+    - name: Install dependencies
+      if: ${{ inputs.install-command != '' }}
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: ${{ inputs.install-command }}
+    - name: Build
+      if: ${{ inputs.build-command != '' }}
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: ${{ inputs.build-command }}
+    - name: Tests / Coverage
+      if: ${{ inputs.enable-coverage == 'true' || inputs.test-command != '' }}
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        set -euo pipefail
+        if [ "${{ inputs.enable-coverage }}" = "true" ] && [ "${{ inputs.coverage-command }}" != "" ]; then
+          echo "Running coverage command"; ${{ inputs.coverage-command }}
+        elif [ "${{ inputs.test-command }}" != "" ]; then
+          echo "Running test command"; ${{ inputs.test-command }}
+        else
+          echo "No test or coverage command provided"
+        fi
+    - name: Summary annotation
+      if: always()
+      shell: bash
+      run: |
+        echo "Node CI finished (tests/coverage step status: $?)" >> "$GITHUB_STEP_SUMMARY"
