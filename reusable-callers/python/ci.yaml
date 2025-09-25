@@ -8,7 +8,8 @@ on:
 
 jobs:
   python-ci:
-    uses: rg-hermann/workflow-templates/.github/workflows/ci-python.yaml@main
+    # Caminho atualizado (2025-09) após reorganização dos reusables
+    uses: rg-hermann/workflow-templates/.github/workflows/_reusable/ci-python.yaml@main
     with:
       python-version: '3.11'
       lint-command: 'flake8 .'    # pode deixar vazio para pular

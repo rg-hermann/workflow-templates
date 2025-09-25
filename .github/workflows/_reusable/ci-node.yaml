@@ -1,5 +1,8 @@
 name: Reusable Node.js CI
 
+# NOTE: Move realizado em 2025-09 para padronizar estrutura.
+# Caminho antigo: .github/workflows/ci-node.yaml (mantido apenas até descontinuação anunciada)
+
 on:
   workflow_call:
     inputs:
@@ -108,7 +111,7 @@ jobs:
           set -euo pipefail
           PM=${{ inputs.package-manager }}
           LEVEL=${{ inputs.audit-level }}
-          FAIL=${{ inputs.fail-on-audit }}
+            FAIL=${{ inputs.fail-on-audit }}
           echo "Running audit with $PM --audit-level=$LEVEL (fail=$FAIL)"
           if [ "$PM" = "npm" ]; then
             CMD="npm audit --audit-level=$LEVEL"

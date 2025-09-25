@@ -1,5 +1,8 @@
 name: Reusable Java CI
 
+# NOTE: Move realizado em 2025-09 para padronizar estrutura.
+# Caminho antigo: .github/workflows/ci-java.yaml
+
 on:
   workflow_call:
     inputs:
@@ -99,7 +102,7 @@ jobs:
           TEST='${{ inputs.test-command }}'
           if [ "$TOOL" = 'maven' ]; then
             : "${BUILD:=${BUILD:-mvn -B -ntp verify}}"
-            : "${TEST:=${TEST:-}}" # normalmente verify já roda testes
+            : "${TEST:=${TEST:-}}" # verify já roda testes
           elif [ "$TOOL" = 'gradle' ]; then
             if [ -x './gradlew' ]; then
               : "${BUILD:=${BUILD:-./gradlew build}}"
@@ -128,26 +131,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-            PATTERNS=(
-              '**/surefire-reports/*.xml'
-              '**/failsafe-reports/*.xml'
-              '**/test-results/test/*.xml'
-            )
-            FOUND=0
-            mkdir -p junit-report
-            for p in "${PATTERNS[@]}"; do
-              for f in $(compgen -G "$p" || true); do
-                cp "$f" junit-report/ || true
-                FOUND=1
-              done
+          PATTERNS=(
+            '**/surefire-reports/*.xml'
+            '**/failsafe-reports/*.xml'
+            '**/test-results/test/*.xml'
+          )
+          FOUND=0
+          mkdir -p junit-report
+          for p in "${PATTERNS[@]}"; do
+            for f in $(compgen -G "$p" || true); do
+              cp "$f" junit-report/ || true
+              FOUND=1
             done
-            if [ $FOUND -eq 1 ]; then
-              echo "found=true" >> $GITHUB_OUTPUT
-              echo "JUnit reports encontrados" >> $GITHUB_STEP_SUMMARY
-            else
-              echo "found=false" >> $GITHUB_OUTPUT
-              echo "Nenhum JUnit report encontrado" >> $GITHUB_STEP_SUMMARY
-            fi
+          done
+          if [ $FOUND -eq 1 ]; then
+            echo "found=true" >> $GITHUB_OUTPUT
+            echo "JUnit reports encontrados" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+            echo "Nenhum JUnit report encontrado" >> $GITHUB_STEP_SUMMARY
+          fi
 
       - name: Upload JUnit reports
         if: ${{ inputs.upload-junit && steps.junit.outputs.found == 'true' }}
@@ -163,7 +166,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Possíveis localizações padrão
           FILES=$(compgen -G '**/jacoco*.xml' || true)
           if [ -z "$FILES" ]; then
             FILES=$(compgen -G '**/reports/jacoco/test/jacocoTestReport.xml' || true)

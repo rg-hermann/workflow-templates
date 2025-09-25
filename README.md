@@ -5,30 +5,32 @@ Repositório pessoal com **workflows reutilizáveis** do GitHub Actions e **exem
 ## Estrutura
 
 ```
-.github/workflows/        # Workflows reutilizáveis (workflow_call)
-reusable-callers/         # Exemplos de uso chamando os reusables
+.github/workflows/                # Workflows operacionais (ex: CI do próprio repo, release)
+.github/workflows/_reusable/      # Workflows reutilizáveis (on: workflow_call)
+reusable-callers/                 # Exemplos de uso chamando os reusables
 	node/
 	python/
+	java/
 ```
 
 ## Workflows Reutilizáveis Disponíveis
 
 | Workflow | Descrição | Principais Inputs |
 |----------|-----------|------------------|
-| `ci-node.yaml` | CI Node.js (install/build/test, coverage opcional, audit customizável, CodeQL, dependency review) | `node-version`, `package-manager`, `build-command`, `test-command`, `enable-coverage`, `run-codeql`, `run-npm-audit`, `audit-level` |
-| `ci-python.yaml` | CI Python (install, lint, test, pip-audit opcional) | `python-version`, `lint-command`, `test-command`, `run-pip-audit` |
-| `ci-java.yaml` | CI Java (Maven/Gradle, JUnit artifacts, JaCoCo opcional, dependency review, CodeQL opcional) | `java-version`, `build-tool`, `build-command`, `test-command`, `enable-coverage`, `run-codeql` |
+| `_reusable/ci-node.yaml` | CI Node.js (install/build/test, coverage opcional, audit customizável, CodeQL, dependency review) | `node-version`, `package-manager`, `build-command`, `test-command`, `enable-coverage`, `run-codeql`, `run-npm-audit`, `audit-level` |
+| `_reusable/ci-python.yaml` | CI Python (install, lint, test, pip-audit opcional) | `python-version`, `lint-command`, `test-command`, `run-pip-audit` |
+| `_reusable/ci-java.yaml` | CI Java (Maven/Gradle, JUnit artifacts, JaCoCo opcional, dependency review, CodeQL opcional) | `java-version`, `build-tool`, `build-command`, `test-command`, `enable-coverage`, `run-codeql` |
 ## Release Automático
-
-Um workflow interno (`auto-release.yaml`) gera versões semânticas automaticamente a cada push na `main`, baseado em mensagens de commit (ou títulos de merge commits) seguindo convenções semelhantes a Conventional Commits.
-
-Regra simplificada de bump:
-- `BREAKING CHANGE` ou `feat!:` -> major
-- `feat:` -> minor
-- `fix:`, `perf:`, `refactor:`, `chore:`, `bug:`, `hot:`, `hotfix:` -> patch
-- Apenas `docs:`, `ci:`, `style:`, `test:`, `build:` -> sem release
-
-Tags criadas:
+```
+jobs:
+  ci:
+    uses: rg-hermann/workflow-templates/.github/workflows/_reusable/ci-node.yaml@main
+    with:
+      node-version: '20'
+      build-command: 'npm run build'
+      test-command: 'npm test'
+    secrets: inherit
+```
 - `vX.Y.Z` (tag anotada)
 - `latest` (atualizada para apontar sempre para a versão liberada mais recente)
 
@@ -49,7 +51,7 @@ Referencie o repositório e o caminho do workflow em `uses:` seguido de um ref (
 ```yaml
 jobs:
 	ci:
-		uses: rg-hermann/workflow-templates/.github/workflows/ci-node.yaml@main
+		uses: rg-hermann/workflow-templates/.github/workflows/_reusable/ci-node.yaml@main
 		with:
 			node-version: '20'
 			build-command: 'npm run build'
@@ -62,7 +64,7 @@ jobs:
 Crie tags `v1`, `v1.1.0` etc e consuma sempre uma tag estável:
 
 ```yaml
-uses: rg-hermann/workflow-templates/.github/workflows/ci-node.yaml@v1
+uses: rg-hermann/workflow-templates/.github/workflows/_reusable/ci-node.yaml@v1
 ```
 
 ## Exemplos (ver pasta `reusable-callers/`)

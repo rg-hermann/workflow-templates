@@ -13,7 +13,8 @@ on:
 
 jobs:
   node-ci:
-    uses: rg-hermann/workflow-templates/.github/workflows/ci-node.yaml@main
+    # Caminho atualizado (2025-09) após reorganização dos reusables
+    uses: rg-hermann/workflow-templates/.github/workflows/_reusable/ci-node.yaml@main
     with:
       node-version: '18'
       install-command: 'npm ci'

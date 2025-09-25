@@ -1,5 +1,8 @@
 name: Reusable Python CI
 
+# NOTE: Move realizado em 2025-09 para padronizar estrutura.
+# Caminho antigo: .github/workflows/ci-python.yaml
+
 on:
   workflow_call:
     inputs:
@@ -90,11 +93,11 @@ jobs:
         run: |
           set -euo pipefail
           CMD='${{ inputs.lint-command }}'
-            if echo "$CMD" | grep -q 'flake8'; then
-              pip install --quiet flake8 || true
-            elif echo "$CMD" | grep -q 'ruff'; then
-              pip install --quiet ruff || true
-            fi
+          if echo "$CMD" | grep -q 'flake8'; then
+            pip install --quiet flake8 || true
+          elif echo "$CMD" | grep -q 'ruff'; then
+            pip install --quiet ruff || true
+          fi
           echo "Running lint: $CMD"
           bash -c "$CMD"
 
@@ -128,8 +131,6 @@ jobs:
           LEVEL='${{ inputs.pip-audit-level }}'
           FAIL='${{ inputs.fail-on-audit }}'
           echo "Running pip-audit (level=$LEVEL fail=$FAIL)"
-          # pip-audit currently exits >0 if any vulnerable packages found; no direct level filter.
-          # We post-filter JSON to decide whether to fail.
           pip-audit -f json > audit.json || true
           COUNT=$(jq 'length' audit.json 2>/dev/null || echo 0)
           echo "Total advisories: $COUNT" | tee -a $GITHUB_STEP_SUMMARY
@@ -140,7 +141,6 @@ jobs:
               exit 1
             fi
           fi
-          # Save SARIF placeholder (future enhancement)
           echo '{"version":"2.1.0","runs":[]}' > pip-audit.sarif
       - name: Upload audit artifacts
         if: ${{ inputs.run-pip-audit }}
