@@ -139,12 +139,12 @@ jobs:
           FOUND=0
           mkdir -p junit-report
           for p in "${PATTERNS[@]}"; do
-            for f in $(compgen -G "$p" || true); do
+            while IFS= read -r -d '' f; do
               cp "$f" junit-report/ || true
               FOUND=1
-            done
+            done < <(compgen -G "$p" 2>/dev/null | tr '\n' '\0' || true)
           done
-          if [ $FOUND -eq 1 ]; then
+          if [ "$FOUND" -eq 1 ]; then
             echo "found=true" >> $GITHUB_OUTPUT
             echo "JUnit reports encontrados" >> $GITHUB_STEP_SUMMARY
           else
@@ -166,13 +166,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          FILES=$(compgen -G '**/jacoco*.xml' || true)
-          if [ -z "$FILES" ]; then
-            FILES=$(compgen -G '**/reports/jacoco/test/jacocoTestReport.xml' || true)
+          mapfile -t FILE_LIST < <(compgen -G '**/jacoco*.xml' 2>/dev/null || true)
+          if [ "${#FILE_LIST[@]}" -eq 0 ]; then
+            mapfile -t FILE_LIST < <(compgen -G '**/reports/jacoco/test/jacocoTestReport.xml' 2>/dev/null || true)
           fi
-          if [ -n "$FILES" ]; then
+          if [ "${#FILE_LIST[@]}" -gt 0 ]; then
             mkdir -p coverage
-            for f in $FILES; do cp "$f" coverage/ || true; done
+            for f in "${FILE_LIST[@]}"; do cp "$f" coverage/ || true; done
             echo "found=true" >> $GITHUB_OUTPUT
             echo "Coverage (JaCoCo) encontrado" >> $GITHUB_STEP_SUMMARY
           else
