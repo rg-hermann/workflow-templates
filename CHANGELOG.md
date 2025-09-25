@@ -7,6 +7,8 @@ O formato segue (inspirado em) Keep a Changelog e versionamento semântico.
 ## [Unreleased]
 ### Added
 - Workflow de release semântico automático (`auto-release.yaml`).
+### Changed
+- Release automático agora somente roda após CI (`CI`) concluir com sucesso.
 
 ## [1.0.0] - 2025-09-24
 ### Added

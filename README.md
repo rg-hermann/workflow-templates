@@ -32,6 +32,8 @@ Tags criadas:
 - `vX.Y.Z` (tag anotada)
 - `latest` (atualizada para apontar sempre para a versão liberada mais recente)
 
+Proteção: a pipeline aguarda sucesso do workflow de CI chamado `CI` antes de prosseguir. Se o CI não concluir com sucesso no tempo limite (40 tentativas x 15s), a release é descartada.
+
 Notas de release listam os commits desde a tag anterior. O `CHANGELOG.md` não é alterado automaticamente (evita loops de CI); futuras melhorias podem sincronizar.
 
 Para alterar regras, edite o script no step "Determine next version".

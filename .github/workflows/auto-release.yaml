@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: write
+  actions: read
   # releases: write (implícito via contents para create-release action)
 
 concurrency:
@@ -30,7 +31,80 @@ jobs:
           echo "Git identity configurada:" >> $GITHUB_STEP_SUMMARY
           git config --list | grep -E 'user.name|user.email' >> $GITHUB_STEP_SUMMARY
 
+      - name: Wait for CI success (required)
+        id: waitci
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          OWNER_REPO="$GITHUB_REPOSITORY"
+          SHA="$GITHUB_SHA"
+          CURRENT_RUN_ID="$GITHUB_RUN_ID"
+          TARGET_WORKFLOW_NAMES="CI" # pode adicionar mais separados por vírgula
+          IFS=',' read -r -a WF_ARRAY <<< "$TARGET_WORKFLOW_NAMES"
+          echo "Aguardando sucesso dos workflows: $TARGET_WORKFLOW_NAMES para SHA $SHA" >> $GITHUB_STEP_SUMMARY
+          MAX_ATTEMPTS=40
+          SLEEP=15
+          ci_ok=false
+          require_count=${#WF_ARRAY[@]}
+          attempt=1
+          while [ $attempt -le $MAX_ATTEMPTS ]; do
+            RESP=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H 'Accept: application/vnd.github+json' \
+              "https://api.github.com/repos/$OWNER_REPO/actions/runs?head_sha=$SHA&event=push&per_page=100")
+            # Para cada workflow requerido verificar se há um run completed success mais recente que não seja este
+            success_count=0
+            failed=false
+            for wf in "${WF_ARRAY[@]}"; do
+              # Seleciona o último run desse workflow
+              WF_JSON=$(echo "$RESP" | jq --arg NAME "$wf" '.workflow_runs | map(select(.name==$NAME)) | sort_by(.run_number) | last')
+              if [ "$WF_JSON" = "null" ]; then
+                continue
+              fi
+              WF_ID=$(echo "$WF_JSON" | jq -r '.id')
+              STATUS=$(echo "$WF_JSON" | jq -r '.status')
+              CONCLUSION=$(echo "$WF_JSON" | jq -r '.conclusion')
+              if [ "$WF_ID" = "$CURRENT_RUN_ID" ]; then
+                # ignora o próprio run caso nomes coincidam
+                continue
+              fi
+              if [ "$STATUS" = "completed" ]; then
+                if [ "$CONCLUSION" = "success" ]; then
+                  success_count=$((success_count+1))
+                else
+                  failed=true
+                  echo "Workflow '$wf' terminou com conclusão '$CONCLUSION'" >> $GITHUB_STEP_SUMMARY
+                fi
+              fi
+            done
+            if $failed; then
+              echo "CI falhou. Nenhuma release será criada." >> $GITHUB_STEP_SUMMARY
+              ci_ok=false
+              break
+            fi
+            if [ $success_count -ge $require_count ]; then
+              ci_ok=true
+              echo "Todos os workflows requeridos concluídos com sucesso." >> $GITHUB_STEP_SUMMARY
+              break
+            fi
+            echo "Tentativa $attempt/$MAX_ATTEMPTS: aguardando ($success_count/$require_count prontos)..." >&2
+            sleep $SLEEP
+            attempt=$((attempt+1))
+          done
+          if [ "$ci_ok" = true ]; then
+            echo "ci-ok=true" >> $GITHUB_OUTPUT
+          else
+            echo "ci-ok=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Skip release (CI not successful)
+        if: steps.waitci.outputs.ci-ok != 'true'
+        run: |
+          echo "Pulando geração de release pois CI não passou ou não foi encontrado." >> $GITHUB_STEP_SUMMARY
+          echo "Nenhuma alteração adicional executada."
+
       - name: Determine next version
+        if: steps.waitci.outputs.ci-ok == 'true'
         id: version
         shell: bash
         run: |
@@ -109,7 +183,7 @@ jobs:
           echo "notes-file=$NOTES_FILE" >> $GITHUB_OUTPUT
 
       - name: Create annotated tag & move latest
-        if: steps.version.outputs.release-needed == 'true'
+        if: steps.waitci.outputs.ci-ok == 'true' && steps.version.outputs.release-needed == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -130,7 +204,7 @@ jobs:
           git push origin latest
 
       - name: Create GitHub Release
-        if: steps.version.outputs.release-needed == 'true'
+        if: steps.waitci.outputs.ci-ok == 'true' && steps.version.outputs.release-needed == 'true'
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -142,7 +216,7 @@ jobs:
           prerelease: false
 
       - name: Summary
-        if: steps.version.outputs.release-needed == 'true'
+        if: steps.waitci.outputs.ci-ok == 'true' && steps.version.outputs.release-needed == 'true'
         run: |
           echo "Release criado: ${{ steps.version.outputs.new-version }}" >> $GITHUB_STEP_SUMMARY
           echo "Última tag anterior: ${{ steps.version.outputs.last-tag }}" >> $GITHUB_STEP_SUMMARY
