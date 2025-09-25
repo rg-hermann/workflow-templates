@@ -22,6 +22,7 @@ reusable-callers/                 # Exemplos de uso chamando os reusables
 | `_reusable/ci-node.yaml` | CI Node.js (install/build/test, coverage opcional, audit customizável, CodeQL, dependency review) | `node-version`, `package-manager`, `build-command`, `test-command`, `enable-coverage`, `run-codeql`, `run-npm-audit`, `audit-level` |
 | `_reusable/ci-python.yaml` | CI Python (install, lint, test, pip-audit opcional) | `python-version`, `lint-command`, `test-command`, `run-pip-audit` |
 | `_reusable/ci-java.yaml` | CI Java (Maven/Gradle, JUnit artifacts, JaCoCo opcional, dependency review, CodeQL opcional) | `java-version`, `build-tool`, `build-command`, `test-command`, `enable-coverage`, `run-codeql` |
+| `_reusable/ci-multilang.yaml` | CI unificado multi-linguagem (Node, Python, Java) via matriz | `languages`, `node-version`, `python-version`, `java-version`, `enable-coverage`, `run-tests` |
 ## Release Automático
 ```
 jobs:

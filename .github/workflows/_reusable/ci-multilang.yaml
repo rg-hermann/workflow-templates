@@ -1,0 +1,234 @@
+name: Reusable Multi-language CI
+
+on:
+  workflow_call:
+    inputs:
+      languages:
+        description: JSON array de linguagens (node,python,java)
+        type: string
+        required: false
+        default: '["node"]'
+      node-version:
+        type: string
+        required: false
+        default: '20'
+      python-version:
+        type: string
+        required: false
+        default: '3.11'
+      java-version:
+        type: string
+        required: false
+        default: '17'
+      java-build-tool:
+        type: string
+        required: false
+        default: 'maven'
+      run-tests:
+        type: boolean
+        required: false
+        default: true
+      enable-coverage:
+        type: boolean
+        required: false
+        default: false
+      working-directory:
+        type: string
+        required: false
+        default: '.'
+      timeout-minutes:
+        type: number
+        required: false
+        default: 20
+      extra-node-test-command:
+        type: string
+        required: false
+        default: ''
+        description: Override de comando de teste Node (se vazio usa npm test)
+      extra-python-test-command:
+        type: string
+        required: false
+        default: ''
+        description: Override de comando de teste Python (se vazio usa pytest -q)
+      extra-java-build-command:
+        type: string
+        required: false
+        default: ''
+        description: Override de build (caso queira algo fora do padrão maven verify / gradle build)
+    outputs:
+      summary-json:
+        description: Artefato JSON inline com resumo por linguagem
+        value: ${{ jobs.aggregate.outputs.summary-json }}
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ${{ fromJSON(inputs.languages) }}
+    env:
+      WD: ${{ inputs.working-directory }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        if: matrix.language == 'node'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs['node-version'] }}
+          cache: npm
+          cache-dependency-path: ${{ env.WD }}/package-lock.json
+      - name: Install Node deps
+        if: matrix.language == 'node' && hashFiles(format('{0}/package.json', env.WD)) != ''
+        run: npm ci
+        working-directory: ${{ env.WD }}
+      - name: Test Node
+        if: matrix.language == 'node' && inputs.run-tests
+        run: |
+          set -euo pipefail
+          CMD=${{ inputs.extra-node-test-command != '' && inputs.extra-node-test-command || 'npm test' }}
+          echo "Running: $CMD"
+          bash -c "$CMD"
+      - name: Coverage Node
+        if: matrix.language == 'node' && inputs.enable-coverage
+        run: |
+          set -euo pipefail
+          if [ -f coverage/lcov.info ]; then echo "Coverage already present"; else npm run test -- --coverage || true; fi
+          echo "node" > node_coverage_marker
+        working-directory: ${{ env.WD }}
+      - name: Upload Node Coverage
+        if: matrix.language == 'node' && inputs.enable-coverage && hashFiles('**/coverage/lcov.info') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-coverage
+          path: coverage
+          if-no-files-found: ignore
+        working-directory: ${{ env.WD }}
+
+      - name: Setup Python
+        if: matrix.language == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs['python-version'] }}
+          cache: pip
+          cache-dependency-path: ${{ env.WD }}/requirements*.txt
+      - name: Install Python deps
+        if: matrix.language == 'python' && hashFiles(format('{0}/requirements.txt', env.WD)) != ''
+        run: pip install -r requirements.txt
+        working-directory: ${{ env.WD }}
+      - name: Test Python
+        if: matrix.language == 'python' && inputs.run-tests
+        run: |
+          set -euo pipefail
+          pip install pytest pytest-cov >/dev/null 2>&1 || true
+          BASE='pytest -q'
+          [ "${{ inputs.enable-coverage }}" = "true" ] && BASE="$BASE --cov=. --cov-report=xml" || true
+          [ -n "${{ inputs.extra-python-test-command }}" ] && BASE='${{ inputs.extra-python-test-command }}'
+          echo "Running: $BASE"; bash -c "$BASE"
+        working-directory: ${{ env.WD }}
+      - name: Upload Python Coverage
+        if: matrix.language == 'python' && inputs.enable-coverage && hashFiles('**/coverage.xml') != ''
+        uses: actions/upload-artifact@v4
+        with:
+            name: python-coverage
+            path: coverage.xml
+            if-no-files-found: ignore
+        working-directory: ${{ env.WD }}
+
+      - name: Setup Java
+        if: matrix.language == 'java'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ inputs['java-version'] }}
+          cache: ${{ inputs['java-build-tool'] == 'gradle' && 'gradle' || 'maven' }}
+      - name: Build/Test Java
+        if: matrix.language == 'java'
+        run: |
+          set -euo pipefail
+          TOOL='${{ inputs['java-build-tool'] }}'
+          CMD=''
+          if [ -n "${{ inputs.extra-java-build-command }}" ]; then
+            CMD='${{ inputs.extra-java-build-command }}'
+          else
+            if [ "$TOOL" = 'maven' ]; then CMD='mvn -B -ntp verify'; else CMD='./gradlew build || gradle build'; fi
+          fi
+          echo "Running: $CMD"
+          bash -c "$CMD"
+      - name: Detect Java Coverage
+        if: matrix.language == 'java' && inputs.enable-coverage
+        id: java_cov
+        run: |
+          set -euo pipefail
+          FILE=$(compgen -G '**/jacoco*.xml' || true)
+          if [ -n "$FILE" ]; then
+            echo "found=true" >> $GITHUB_OUTPUT
+            mkdir -p coverage && cp $FILE coverage/
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+          fi
+      - name: Upload Java Coverage
+        if: matrix.language == 'java' && inputs.enable-coverage && steps.java_cov.outputs.found == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-coverage
+          path: coverage
+          if-no-files-found: ignore
+
+      - name: Write per-language summary fragment
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "language=${{ matrix.language }}" >> $GITHUB_OUTPUT
+          echo "### ${{ matrix.language }} summary" >> $GITHUB_STEP_SUMMARY
+          echo "Tests: ${{ inputs.run-tests }} | Coverage: ${{ inputs.enable-coverage }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Emit JSON summary artifact
+        shell: bash
+        run: |
+          printf '{"language":"%s","tests":%s,"coverage":%s}' \
+            '${{ matrix.language }}' \
+            '${{ inputs.run-tests && 'true' || 'false' }}' \
+            '${{ inputs.enable-coverage && 'true' || 'false' }}' > summary-${{ matrix.language }}.json
+        continue-on-error: true
+      - name: Upload language summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: summary-${{ matrix.language }}
+          path: summary-${{ matrix.language }}.json
+          if-no-files-found: ignore
+
+  aggregate:
+    needs: ci
+    runs-on: ubuntu-latest
+    outputs:
+      summary-json: ${{ steps.combine.outputs.summary-json }}
+    steps:
+      - name: Download summaries
+        uses: actions/download-artifact@v4
+        with:
+          path: summaries
+          pattern: summary-*
+          merge-multiple: true
+      - name: Combine JSON
+        id: combine
+        shell: bash
+        run: |
+          set -euo pipefail
+          JSON=$(jq -s '.' summaries/summary-*.json 2>/dev/null || echo '[]')
+          echo "$JSON" > summaries/combined.json
+          echo "summary-json=$JSON" >> $GITHUB_OUTPUT
+          echo "### Multi-language CI Summary" >> $GITHUB_STEP_SUMMARY
+          echo "$JSON" >> $GITHUB_STEP_SUMMARY
+      - name: Upload combined summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: multi-lang-summary
+          path: summaries/combined.json
+          if-no-files-found: error
