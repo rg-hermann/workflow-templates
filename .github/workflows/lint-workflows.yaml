@@ -36,12 +36,12 @@ jobs:
           if [ -d "$DIR" ]; then
             MISSING=$(grep -L "workflow_call:" "$DIR"/*.yml "$DIR"/*.yaml 2>/dev/null || true)
             if [ -n "$MISSING" ]; then
-              echo "Workflows reutilizáveis sem 'on: workflow_call':" >&2
-              echo "$MISSING" >&2
+              printf '%s\n' "Workflows reutilizáveis sem 'on: workflow_call':" >&2
+              printf '%s\n' "$MISSING" >&2
               exit 1
             fi
           fi
-          echo "Todos os reusables possuem gatilho workflow_call" >> $GITHUB_STEP_SUMMARY
+          echo "Todos os reusables possuem gatilho workflow_call" >> "$GITHUB_STEP_SUMMARY"
 
       - name: YAML basic sanity
         shell: bash
@@ -74,5 +74,8 @@ jobs:
         if: always()
         shell: bash
         run: |
-          echo "### Resultado Lint Workflows" >> $GITHUB_STEP_SUMMARY
-          echo "Actionlint & checks executados em $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_STEP_SUMMARY
+          TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          {
+            echo "### Resultado Lint Workflows";
+            echo "Actionlint & checks executados em $TS";
+          } >> "$GITHUB_STEP_SUMMARY"

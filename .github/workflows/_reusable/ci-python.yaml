@@ -85,7 +85,7 @@ jobs:
 
       - name: Install dependencies
         if: ${{ inputs.install-command != '' }}
-        run: ${{ inputs.install-command }}
+        run: bash -c "${{ inputs.install-command }}"
 
       - name: Lint
         if: ${{ inputs.lint-command != '' }}
@@ -106,14 +106,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          TCMD='${{ inputs.test-command }}'
           if [ "${{ inputs.enable-coverage }}" = "true" ]; then
             pip install --quiet pytest pytest-cov || true
             echo "Running with coverage"
-            pytest ${{ inputs.test-command == 'pytest -q' && '' || inputs.test-command }} ${{ inputs.coverage-args }} || EXIT=$?
+            if [ "$TCMD" = 'pytest -q' ]; then
+              pytest -q ${{ inputs.coverage-args }} || EXIT=$?
+            else
+              bash -c "$TCMD ${{ inputs.coverage-args }}" || EXIT=$?
+            fi
           else
-            bash -c "${{ inputs.test-command }}" || EXIT=$?
+            bash -c "$TCMD" || EXIT=$?
           fi
-          : "${EXIT:=0}"; exit $EXIT
+          : "${EXIT:=0}"; exit "$EXIT"
       - name: Upload coverage artifact
         if: ${{ inputs.enable-coverage }}
         uses: actions/upload-artifact@v4
@@ -153,4 +158,4 @@ jobs:
           if-no-files-found: ignore
       - name: Summary
         if: always()
-        run: echo "Python CI finalizada" >> $GITHUB_STEP_SUMMARY
+        run: echo "Python CI finalizada" >> "$GITHUB_STEP_SUMMARY"

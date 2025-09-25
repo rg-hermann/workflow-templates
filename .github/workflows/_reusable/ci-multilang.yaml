@@ -94,14 +94,22 @@ jobs:
         if: matrix.language == 'node' && inputs.run-tests
         run: |
           set -euo pipefail
-          CMD=${{ inputs.extra-node-test-command != '' && inputs.extra-node-test-command || 'npm test' }}
+          if [ -n "${{ inputs.extra-node-test-command }}" ]; then
+            CMD='${{ inputs.extra-node-test-command }}'
+          else
+            CMD='npm test'
+          fi
           echo "Running: $CMD"
           bash -c "$CMD"
       - name: Coverage Node
         if: matrix.language == 'node' && inputs.enable-coverage
         run: |
           set -euo pipefail
-          if [ -f coverage/lcov.info ]; then echo "Coverage already present"; else npm run test -- --coverage || true; fi
+          if [ -f "coverage/lcov.info" ]; then
+            echo "Coverage already present"
+          else
+            npm run test -- --coverage || true
+          fi
           echo "node" > node_coverage_marker
         working-directory: ${{ env.WD }}
       - name: Upload Node Coverage
@@ -111,7 +119,6 @@ jobs:
           name: node-coverage
           path: coverage
           if-no-files-found: ignore
-        working-directory: ${{ env.WD }}
 
       - name: Setup Python runtime
         if: matrix.language == 'python'
@@ -129,11 +136,21 @@ jobs:
         if: matrix.language == 'python' && inputs.run-tests
         run: |
           set -euo pipefail
-          pip install pytest pytest-cov >/dev/null 2>&1 || true
-          BASE='pytest -q'
-          [ "${{ inputs.enable-coverage }}" = "true" ] && BASE="$BASE --cov=. --cov-report=xml" || true
-          [ -n "${{ inputs.extra-python-test-command }}" ] && BASE='${{ inputs.extra-python-test-command }}'
-          echo "Running: $BASE"; bash -c "$BASE"
+          if [ "${{ inputs.enable-coverage }}" = "true" ]; then
+            pip install pytest pytest-cov >/dev/null 2>&1 || true
+          else
+            pip install pytest >/dev/null 2>&1 || true
+          fi
+          if [ -n "${{ inputs.extra-python-test-command }}" ]; then
+            BASE='${{ inputs.extra-python-test-command }}'
+          else
+            BASE='pytest -q'
+          fi
+          if [ "${{ inputs.enable-coverage }}" = "true" ]; then
+            BASE="$BASE --cov=. --cov-report=xml"
+          fi
+          echo "Running: $BASE"
+          bash -c "$BASE"
         working-directory: ${{ env.WD }}
       - name: Upload Python Coverage
         if: matrix.language == 'python' && inputs.enable-coverage && hashFiles('**/coverage.xml') != ''
@@ -142,7 +159,6 @@ jobs:
             name: python-coverage
             path: coverage.xml
             if-no-files-found: ignore
-        working-directory: ${{ env.WD }}
 
       - name: Setup Java runtime
         if: matrix.language == 'java'
@@ -173,10 +189,10 @@ jobs:
           set -euo pipefail
           FILE=$(compgen -G '**/jacoco*.xml' || true)
           if [ -n "$FILE" ]; then
-            echo "found=true" >> $GITHUB_OUTPUT
-            mkdir -p coverage && cp $FILE coverage/
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            mkdir -p coverage && cp "$FILE" coverage/
           else
-            echo "found=false" >> $GITHUB_OUTPUT
+            echo "found=false" >> "$GITHUB_OUTPUT"
           fi
       - name: Upload Java Coverage
         if: matrix.language == 'java' && inputs.enable-coverage && steps.java_cov.outputs.found == 'true'
@@ -197,10 +213,14 @@ jobs:
       - name: Emit JSON summary artifact
         shell: bash
         run: |
-          printf '{"language":"%s","tests":%s,"coverage":%s}' \
-            '${{ matrix.language }}' \
-            '${{ inputs.run-tests && 'true' || 'false' }}' \
-            '${{ inputs.enable-coverage && 'true' || 'false' }}' > summary-${{ matrix.language }}.json
+          set -euo pipefail
+          lang='${{ matrix.language }}'
+          tests='${{ inputs.run-tests }}'
+          cov='${{ inputs.enable-coverage }}'
+          # Normaliza booleans para true/false puro
+          [ "$tests" = "true" ] || tests=false
+            [ "$cov" = "true" ] || cov=false
+          printf '{"language":"%s","tests":%s,"coverage":%s}' "$lang" "$tests" "$cov" > "summary-${{ matrix.language }}.json"
         continue-on-error: true
       - name: Upload language summary
         uses: actions/upload-artifact@v4

@@ -88,7 +88,7 @@ jobs:
               break
             fi
             echo "Tentativa $attempt/$MAX_ATTEMPTS: aguardando ($success_count/$require_count prontos)..." >&2
-            sleep $SLEEP
+            sleep "$SLEEP"
             attempt=$((attempt+1))
           done
           if [ "$ci_ok" = true ]; then
@@ -126,7 +126,7 @@ jobs:
           else
             RANGE="HEAD"
           fi
-          COMMITS=$(git log --format=%s $RANGE || true)
+          COMMITS=$(git log --format=%s "$RANGE" || true)
           if [ -z "$COMMITS" ]; then
             echo "Nenhum commit novo desde $LAST_TAG. Abortando release." >&2
             echo "release-needed=false" >> $GITHUB_OUTPUT
@@ -178,8 +178,8 @@ jobs:
             echo "Base: $LAST_TAG";
             echo;
             echo "## Commits";
-            git log --pretty='- %s (%h)' $RANGE;
-          } > $NOTES_FILE
+            git log --pretty='- %s (%h)' "$RANGE";
+          } > "$NOTES_FILE"
           echo "notes-file=$NOTES_FILE" >> $GITHUB_OUTPUT
 
       - name: Create annotated tag & move latest
@@ -218,6 +218,8 @@ jobs:
       - name: Summary
         if: steps.waitci.outputs.ci-ok == 'true' && steps.version.outputs.release-needed == 'true'
         run: |
-          echo "Release criado: ${{ steps.version.outputs.new-version }}" >> $GITHUB_STEP_SUMMARY
-          echo "Última tag anterior: ${{ steps.version.outputs.last-tag }}" >> $GITHUB_STEP_SUMMARY
-          echo "'latest' agora aponta para ${{ steps.version.outputs.new-version }}" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "Release criado: ${{ steps.version.outputs.new-version }}";
+            echo "Última tag anterior: ${{ steps.version.outputs.last-tag }}";
+            echo "'latest' agora aponta para ${{ steps.version.outputs.new-version }}";
+          } >> "$GITHUB_STEP_SUMMARY"
