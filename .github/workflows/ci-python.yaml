@@ -58,7 +58,9 @@ jobs:
       - name: Lint
         if: ${{ inputs.lint-command != '' }}
         run: |
-          pip install flake8 >/dev/null 2>&1 || true
+          if echo "${{ inputs.lint-command }}" | grep -q "flake8"; then
+            pip install flake8 >/dev/null 2>&1 || true
+          fi
           ${{ inputs.lint-command }}
         shell: bash
 
