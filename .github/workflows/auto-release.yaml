@@ -28,8 +28,8 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          echo "Git identity configurada:" >> $GITHUB_STEP_SUMMARY
-          git config --list | grep -E 'user.name|user.email' >> $GITHUB_STEP_SUMMARY
+          echo "Git identity configurada:" >> "$GITHUB_STEP_SUMMARY"
+          git config --list | grep -E 'user.name|user.email' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Wait for CI success (required)
         id: waitci
@@ -43,7 +43,7 @@ jobs:
           CURRENT_RUN_ID="$GITHUB_RUN_ID"
           TARGET_WORKFLOW_NAMES="CI" # pode adicionar mais separados por vírgula
           IFS=',' read -r -a WF_ARRAY <<< "$TARGET_WORKFLOW_NAMES"
-          echo "Aguardando sucesso dos workflows: $TARGET_WORKFLOW_NAMES para SHA $SHA" >> $GITHUB_STEP_SUMMARY
+          echo "Aguardando sucesso dos workflows: $TARGET_WORKFLOW_NAMES para SHA $SHA" >> "$GITHUB_STEP_SUMMARY"
           MAX_ATTEMPTS=40
           SLEEP=15
           ci_ok=false
@@ -73,18 +73,18 @@ jobs:
                   success_count=$((success_count+1))
                 else
                   failed=true
-                  echo "Workflow '$wf' terminou com conclusão '$CONCLUSION'" >> $GITHUB_STEP_SUMMARY
+                  echo "Workflow '$wf' terminou com conclusão '$CONCLUSION'" >> "$GITHUB_STEP_SUMMARY"
                 fi
               fi
             done
             if $failed; then
-              echo "CI falhou. Nenhuma release será criada." >> $GITHUB_STEP_SUMMARY
+              echo "CI falhou. Nenhuma release será criada." >> "$GITHUB_STEP_SUMMARY"
               ci_ok=false
               break
             fi
             if [ $success_count -ge $require_count ]; then
               ci_ok=true
-              echo "Todos os workflows requeridos concluídos com sucesso." >> $GITHUB_STEP_SUMMARY
+              echo "Todos os workflows requeridos concluídos com sucesso." >> "$GITHUB_STEP_SUMMARY"
               break
             fi
             echo "Tentativa $attempt/$MAX_ATTEMPTS: aguardando ($success_count/$require_count prontos)..." >&2
@@ -92,16 +92,18 @@ jobs:
             attempt=$((attempt+1))
           done
           if [ "$ci_ok" = true ]; then
-            echo "ci-ok=true" >> $GITHUB_OUTPUT
+            echo "ci-ok=true" >> "$GITHUB_OUTPUT"
           else
-            echo "ci-ok=false" >> $GITHUB_OUTPUT
+            echo "ci-ok=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Skip release (CI not successful)
         if: steps.waitci.outputs.ci-ok != 'true'
         run: |
-          echo "Pulando geração de release pois CI não passou ou não foi encontrado." >> $GITHUB_STEP_SUMMARY
-          echo "Nenhuma alteração adicional executada."
+          {
+            echo "Pulando geração de release pois CI não passou ou não foi encontrado.";
+            echo "Nenhuma alteração adicional executada.";
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Determine next version
         if: steps.waitci.outputs.ci-ok == 'true'
@@ -129,11 +131,11 @@ jobs:
           COMMITS=$(git log --format=%s "$RANGE" || true)
           if [ -z "$COMMITS" ]; then
             echo "Nenhum commit novo desde $LAST_TAG. Abortando release." >&2
-            echo "release-needed=false" >> $GITHUB_OUTPUT
+            echo "release-needed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          echo "Commits considerados:\n$COMMITS" >&2
+          printf 'Commits considerados:\n%s\n' "$COMMITS" >&2
 
           BUMP="patch"
           if echo "$COMMITS" | grep -E '(BREAKING CHANGE|!:)' -q; then
@@ -148,7 +150,7 @@ jobs:
               BUMP="patch"
             else
               echo "Somente mudanças não-release (docs/ci/style/test/build). Abortando." >&2
-              echo "release-needed=false" >> $GITHUB_OUTPUT
+              echo "release-needed=false" >> "$GITHUB_OUTPUT"
               exit 0
             fi
           fi
@@ -166,9 +168,9 @@ jobs:
 
           NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
           echo "Bump: $BUMP -> $NEW_VERSION" >&2
-          echo "new-version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "last-tag=$LAST_TAG" >> $GITHUB_OUTPUT
-          echo "release-needed=true" >> $GITHUB_OUTPUT
+          echo "new-version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "last-tag=$LAST_TAG" >> "$GITHUB_OUTPUT"
+          echo "release-needed=true" >> "$GITHUB_OUTPUT"
 
           # Monta notas simples (pode ser refinado futuramente)
           NOTES_FILE=release_notes.md
@@ -180,7 +182,7 @@ jobs:
             echo "## Commits";
             git log --pretty='- %s (%h)' "$RANGE";
           } > "$NOTES_FILE"
-          echo "notes-file=$NOTES_FILE" >> $GITHUB_OUTPUT
+          echo "notes-file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
 
       - name: Create annotated tag & move latest
         if: steps.waitci.outputs.ci-ok == 'true' && steps.version.outputs.release-needed == 'true'

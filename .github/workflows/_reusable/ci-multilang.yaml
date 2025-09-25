@@ -206,9 +206,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "language=${{ matrix.language }}" >> $GITHUB_OUTPUT
-          echo "### ${{ matrix.language }} summary" >> $GITHUB_STEP_SUMMARY
-          echo "Tests: ${{ inputs.run-tests }} | Coverage: ${{ inputs.enable-coverage }}" >> $GITHUB_STEP_SUMMARY
+          echo "language=${{ matrix.language }}" >> "$GITHUB_OUTPUT"
+          echo "### ${{ matrix.language }} summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "Tests: ${{ inputs.run-tests }} | Coverage: ${{ inputs.enable-coverage }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Emit JSON summary artifact
         shell: bash
@@ -248,9 +248,9 @@ jobs:
           set -euo pipefail
           JSON=$(jq -s '.' summaries/summary-*.json 2>/dev/null || echo '[]')
           echo "$JSON" > summaries/combined.json
-          echo "summary-json=$JSON" >> $GITHUB_OUTPUT
-          echo "### Multi-language CI Summary" >> $GITHUB_STEP_SUMMARY
-          echo "$JSON" >> $GITHUB_STEP_SUMMARY
+          echo "summary-json=$JSON" >> "$GITHUB_OUTPUT"
+          echo "### Multi-language CI Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "$JSON" >> "$GITHUB_STEP_SUMMARY"
       - name: Upload combined summary
         uses: actions/upload-artifact@v4
         with:

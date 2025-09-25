@@ -113,11 +113,10 @@ jobs:
           else
             echo "Ferramenta desconhecida: $TOOL" >&2; exit 1
           fi
-          echo "build=$BUILD" >> $GITHUB_OUTPUT
-          echo "test=$TEST" >> $GITHUB_OUTPUT
-          echo "Comando de build final: $BUILD" | tee -a $GITHUB_STEP_SUMMARY
-          if [ -n "$TEST" ]; then echo "Comando de test separado: $TEST" | tee -a $GITHUB_STEP_SUMMARY; fi
-
+          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
+          echo "test=$TEST" >> "$GITHUB_OUTPUT"
+          echo "Comando de build final: $BUILD" | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ -n "$TEST" ]; then echo "Comando de test separado: $TEST" | tee -a "$GITHUB_STEP_SUMMARY"; fi
       - name: Build
         run: ${{ steps.cmds.outputs.build }}
 
@@ -146,11 +145,11 @@ jobs:
             done < <(compgen -G "$p" 2>/dev/null || true)
           done
           if [ "$FOUND" -eq 1 ]; then
-            echo "found=true" >> $GITHUB_OUTPUT
-            echo "JUnit reports encontrados" >> $GITHUB_STEP_SUMMARY
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "JUnit reports encontrados" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "found=false" >> $GITHUB_OUTPUT
-            echo "Nenhum JUnit report encontrado" >> $GITHUB_STEP_SUMMARY
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "Nenhum JUnit report encontrado" >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Upload JUnit reports
@@ -176,11 +175,11 @@ jobs:
             for f in "${FILE_LIST[@]}"; do
               cp "$f" coverage/ 2>/dev/null || true
             done
-            echo "found=true" >> $GITHUB_OUTPUT
-            echo "Coverage (JaCoCo) encontrado" >> $GITHUB_STEP_SUMMARY
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "Coverage (JaCoCo) encontrado" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "found=false" >> $GITHUB_OUTPUT
-            echo "Nenhum relatório JaCoCo encontrado" >> $GITHUB_STEP_SUMMARY
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "Nenhum relatório JaCoCo encontrado" >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Upload coverage artifact
