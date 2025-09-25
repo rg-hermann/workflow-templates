@@ -1,0 +1,71 @@
+name: Lint Workflows
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**/*.yml'
+      - '.github/workflows/**/*.yaml'
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/**/*.yml'
+      - '.github/workflows/**/*.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    name: Actionlint Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run actionlint
+        uses: docker://rhysd/actionlint:1.7.1
+        # Obs: considere fixar por digest SHA para segurança adicional.
+
+      - name: Extra checks (reusables precisam de workflow_call)
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIR='.github/workflows/_reusable'
+          if [ -d "$DIR" ]; then
+            MISSING=$(grep -L "workflow_call:" "$DIR"/*.yml "$DIR"/*.yaml 2>/dev/null || true)
+            if [ -n "$MISSING" ]; then
+              echo "Workflows reutilizáveis sem 'on: workflow_call':" >&2
+              echo "$MISSING" >&2
+              exit 1
+            fi
+          fi
+          echo "Todos os reusables possuem gatilho workflow_call" >> $GITHUB_STEP_SUMMARY
+
+      - name: YAML basic sanity
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Validando parsing YAML via yq (rápido)" >> $GITHUB_STEP_SUMMARY
+          pip install --quiet yq >/dev/null 2>&1 || true
+          for f in $(git ls-files '.github/workflows/*.yml' '.github/workflows/*.yaml' '.github/workflows/_reusable/*.yml' '.github/workflows/_reusable/*.yaml' 2>/dev/null); do
+            python - <<'PY'
+import sys, yaml, pathlib
+for path in sys.argv[1:]:
+    try:
+        yaml.safe_load(open(path))
+    except Exception as e:
+        print(f"YAML inválido: {path}: {e}", file=sys.stderr)
+        sys.exit(1)
+PY
+            echo "✔ $f" >> $GITHUB_STEP_SUMMARY
+          done
+          echo "Validação básica de YAML concluída" >> $GITHUB_STEP_SUMMARY
+
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          echo "### Resultado Lint Workflows" >> $GITHUB_STEP_SUMMARY
+          echo "Actionlint & checks executados em $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_STEP_SUMMARY

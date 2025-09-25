@@ -1,5 +1,7 @@
 # Workflow Templates
 
+![Lint Workflows](https://github.com/rg-hermann/workflow-templates/actions/workflows/lint-workflows.yaml/badge.svg)
+
 Repositório pessoal com **workflows reutilizáveis** do GitHub Actions e **exemplos de callers**.
 
 ## Estrutura
