@@ -1,0 +1,224 @@
+name: Reusable Rust CI
+
+on:
+  workflow_call:
+    inputs:
+      rust-toolchain:
+        type: string
+        required: false
+        default: stable
+        description: Rust toolchain (stable|beta|nightly or version like 1.80.0)
+      components:
+        type: string
+        required: false
+        default: ''
+        description: Extra rustup components (comma separated) e.g. clippy,rustfmt
+      run-clippy:
+        type: boolean
+        required: false
+        default: true
+        description: Run cargo clippy (requires clippy component)
+      deny-warnings:
+        type: boolean
+        required: false
+        default: true
+        description: Treat clippy warnings as errors (adds -D warnings)
+      run-format-check:
+        type: boolean
+        required: false
+        default: false
+        description: Run cargo fmt -- --check (requires rustfmt component)
+      run-tests:
+        type: boolean
+        required: false
+        default: true
+        description: Run cargo test
+      build-command:
+        type: string
+        required: false
+        default: 'cargo build --all --locked'
+        description: Custom build command (override default)
+      test-command:
+        type: string
+        required: false
+        default: 'cargo test --all --locked'
+        description: Custom test command
+      run-audit:
+        type: boolean
+        required: false
+        default: false
+        description: Run cargo audit (installs cargo-audit)
+      fail-on-audit:
+        type: boolean
+        required: false
+        default: false
+        description: Fail job if vulnerabilities found by cargo audit
+      enable-coverage:
+        type: boolean
+        required: false
+        default: false
+        description: Generate coverage with cargo-tarpaulin (Linux only)
+      coverage-timeout:
+        type: number
+        required: false
+        default: 600
+        description: Timeout (seconds) for tarpaulin run
+      upload-coverage-artifact:
+        type: boolean
+        required: false
+        default: true
+        description: Upload coverage artifact when enable-coverage
+      working-directory:
+        type: string
+        required: false
+        default: '.'
+        description: Project path containing Cargo.toml
+      timeout-minutes:
+        type: number
+        required: false
+        default: 15
+        description: Job timeout
+    secrets: {}
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    env:
+      RUSTFLAGS: -D warnings
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ inputs.rust-toolchain }}
+          components: ${{ inputs.components }}
+
+      - name: Show rustc version
+        run: rustc -Vv
+
+      - name: Cache cargo registry + git + target
+        id: cache-cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ inputs.rust-toolchain }}-${{ hashFiles(format('{0}/Cargo.lock', inputs.working-directory)) }}
+          restore-keys: |
+            cargo-${{ runner.os }}-${{ inputs.rust-toolchain }}-
+            cargo-${{ runner.os }}-
+
+      - name: Fetch dependencies (cargo fetch)
+        run: cargo fetch --locked
+
+      - name: Build
+        run: ${{ inputs.build-command }}
+
+      - name: Clippy
+        if: ${{ inputs.run-clippy }}
+        run: |
+          set -euo pipefail
+          if ! rustup component list --installed | grep -q clippy; then
+            echo 'clippy component not installed; installing...'\
+            && rustup component add clippy
+          fi
+          EXTRA=""
+          if [ "${{ inputs.deny-warnings }}" = "true" ]; then EXTRA="-D warnings"; fi
+          echo "Running cargo clippy $EXTRA" | tee -a "$GITHUB_STEP_SUMMARY"
+          cargo clippy --all-targets --all-features --no-deps -- $EXTRA
+
+      - name: Format check
+        if: ${{ inputs.run-format-check }}
+        run: |
+          set -euo pipefail
+          if ! rustup component list --installed | grep -q rustfmt; then
+            echo 'rustfmt component not installed; installing...' && rustup component add rustfmt
+          fi
+            cargo fmt -- --check
+
+      - name: Test
+        if: ${{ inputs.run-tests }}
+        run: ${{ inputs.test-command }}
+
+      - name: Install cargo-audit
+        if: ${{ inputs.run-audit }}
+        run: |
+          set -euo pipefail
+          cargo install --locked cargo-audit || echo 'cargo-audit install failed'
+
+      - name: Cargo audit
+        if: ${{ inputs.run-audit }}
+        id: audit
+        run: |
+          set -euo pipefail
+          echo 'Running cargo audit'
+          set +e
+          cargo audit -q -F json > audit.json 2>&1
+          CODE=$?
+          set -e
+          echo "exit-code=$CODE" >> "$GITHUB_OUTPUT"
+          if [ $CODE -ne 0 ]; then
+            echo 'Vulnerabilities detected' >> "$GITHUB_STEP_SUMMARY"
+            if [ "${{ inputs.fail-on-audit }}" = "true" ]; then
+              echo 'Failing due to fail-on-audit=true' >&2
+              cat audit.json || true
+              exit 1
+            else
+              echo 'Not failing build (fail-on-audit=false)' >&2
+            fi
+          else
+            echo 'No vulnerabilities (cargo audit)' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload audit artifact
+        if: ${{ inputs.run-audit }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-audit-report
+          path: audit.json
+          if-no-files-found: ignore
+
+      - name: Coverage (tarpaulin)
+        if: ${{ inputs.enable-coverage }}
+        run: |
+          set -euo pipefail
+          cargo install --locked cargo-tarpaulin || true
+          echo "Running cargo tarpaulin (timeout=${{ inputs.coverage-timeout }}s)" | tee -a "$GITHUB_STEP_SUMMARY"
+          set +e
+          cargo tarpaulin --timeout ${{ inputs.coverage-timeout }} --out Xml --workspace --ignore-tests || EXIT=$?
+          set -e
+          : "${EXIT:=0}"; if [ $EXIT -ne 0 ]; then echo "Tarpaulin exited with $EXIT" >> "$GITHUB_STEP_SUMMARY"; fi
+          if [ -f tarpaulin-report.xml ]; then
+            echo 'Coverage report generated' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'No coverage report produced' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload coverage artifact
+        if: ${{ inputs.enable-coverage && inputs.upload-coverage-artifact }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-coverage
+          path: tarpaulin-report.xml
+          if-no-files-found: ignore
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### Rust CI Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "Toolchain: ${{ inputs.rust-toolchain }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Clippy: ${{ inputs.run-clippy }} (deny-warnings=${{ inputs.deny-warnings }})" >> "$GITHUB_STEP_SUMMARY"
+          echo "Fmt check: ${{ inputs.run-format-check }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Tests: ${{ inputs.run-tests }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Audit: ${{ inputs.run-audit }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Coverage: ${{ inputs.enable-coverage }}" >> "$GITHUB_STEP_SUMMARY"

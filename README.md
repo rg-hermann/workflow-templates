@@ -23,6 +23,7 @@ reusable-callers/                 # Exemplos de uso chamando os reusables
 | `_reusable/ci-python.yaml` | CI Python (install, lint, test, pip-audit opcional) | `python-version`, `lint-command`, `test-command`, `run-pip-audit` |
 | `_reusable/ci-java.yaml` | CI Java (Maven/Gradle, JUnit artifacts, JaCoCo opcional, dependency review, CodeQL opcional) | `java-version`, `build-tool`, `build-command`, `test-command`, `enable-coverage`, `run-codeql` |
 | `_reusable/ci-multilang.yaml` | CI unificado multi-linguagem (Node, Python, Java) via matriz | `languages`, `node-version`, `python-version`, `java-version`, `enable-coverage`, `run-tests` |
+| `_reusable/ci-rust.yaml` | CI Rust (build, clippy, fmt opcional, testes, audit, cobertura tarpaulin) | `rust-toolchain`, `run-clippy`, `run-format-check`, `run-audit`, `enable-coverage` |
 
 ### Composite Actions
 
@@ -144,6 +145,9 @@ Consulte `.github/copilot-instructions.md` para padrões de contribuição e ger
 - Incluir scan SAST adicional (Trivy, etc.)
 - Publicar SARIF de pip-audit e npm audit
 - Adicionar testes de smoke pós-deploy
+- Unificar lógica de cobertura em composite compartilhado
+- Adicionar suporte a Rust no multi-linguagem
+- Introduzir caching incremental de builds Node (turbo / nx) opcional
 
 ## Licença
 

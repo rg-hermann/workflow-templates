@@ -1,0 +1,17 @@
+name: Example Rust CI Caller
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  rust-ci:
+    uses: rg-hermann/workflow-templates/.github/workflows/_reusable/ci-rust.yaml@main
+    with:
+      rust-toolchain: stable
+      run-clippy: true
+      run-format-check: true
+      run-audit: false
+      enable-coverage: false
+    secrets: inherit
