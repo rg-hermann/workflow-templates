@@ -77,13 +77,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Setup Node runtime
         if: matrix.language == 'node'
-        uses: actions/setup-node@v4
+        uses: ./.github/actions/setup-runtime
         with:
-          node-version: ${{ inputs['node-version'] }}
-          cache: npm
-          cache-dependency-path: ${{ env.WD }}/package-lock.json
+          language: node
+          version: ${{ inputs['node-version'] }}
+          package-manager: npm
+          cache: true
+          working-directory: ${{ env.WD }}
       - name: Install Node deps
         if: matrix.language == 'node' && hashFiles(format('{0}/package.json', env.WD)) != ''
         run: npm ci
@@ -111,13 +113,14 @@ jobs:
           if-no-files-found: ignore
         working-directory: ${{ env.WD }}
 
-      - name: Setup Python
+      - name: Setup Python runtime
         if: matrix.language == 'python'
-        uses: actions/setup-python@v5
+        uses: ./.github/actions/setup-runtime
         with:
-          python-version: ${{ inputs['python-version'] }}
-          cache: pip
-          cache-dependency-path: ${{ env.WD }}/requirements*.txt
+          language: python
+          version: ${{ inputs['python-version'] }}
+          cache: true
+          working-directory: ${{ env.WD }}
       - name: Install Python deps
         if: matrix.language == 'python' && hashFiles(format('{0}/requirements.txt', env.WD)) != ''
         run: pip install -r requirements.txt
@@ -141,13 +144,15 @@ jobs:
             if-no-files-found: ignore
         working-directory: ${{ env.WD }}
 
-      - name: Setup Java
+      - name: Setup Java runtime
         if: matrix.language == 'java'
-        uses: actions/setup-java@v4
+        uses: ./.github/actions/setup-runtime
         with:
-          distribution: temurin
-          java-version: ${{ inputs['java-version'] }}
-          cache: ${{ inputs['java-build-tool'] == 'gradle' && 'gradle' || 'maven' }}
+          language: java
+          version: ${{ inputs['java-version'] }}
+          java-build-tool: ${{ inputs['java-build-tool'] }}
+          cache: true
+
       - name: Build/Test Java
         if: matrix.language == 'java'
         run: |

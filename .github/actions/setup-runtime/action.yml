@@ -1,0 +1,73 @@
+name: Setup Runtime (Node/Python/Java)
+description: Unified runtime setup with optional caching for Node, Python, or Java
+inputs:
+  language:
+    description: 'Runtime language (node|python|java)'
+    required: true
+  version:
+    description: 'Version to install (Node/Python/Java). If empty, a sensible default is chosen.'
+    required: false
+    default: ''
+  package-manager:
+    description: 'Package manager (node only: npm|yarn|pnpm)'
+    required: false
+    default: 'npm'
+  java-build-tool:
+    description: 'Java build tool (maven|gradle) used only for cache selection'
+    required: false
+    default: 'maven'
+  cache:
+    description: 'Enable dependency cache when supported'
+    required: false
+    default: 'true'
+  working-directory:
+    description: 'Project directory (only affects cache-dependency-path for Node/Python)'
+    required: false
+    default: '.'
+outputs:
+  resolved-version:
+    description: 'Version value actually used'
+    value: ${{ steps.out.outputs.resolved-version }}
+runs:
+  using: composite
+  steps:
+    - id: resolve
+      shell: bash
+      run: |
+        set -euo pipefail
+        lang='${{ inputs.language }}'
+        ver='${{ inputs.version }}'
+        if [ -z "$ver" ]; then
+          case "$lang" in
+            node) ver='20' ;;
+            python) ver='3.11' ;;
+            java) ver='17' ;;
+            *) echo "Linguagem desconhecida: $lang" >&2; exit 1 ;;
+          esac
+        fi
+        echo "resolved=$ver" >> "$GITHUB_OUTPUT"
+        echo "Using $lang version $ver"
+    - name: Setup Node.js
+      if: ${{ inputs.language == 'node' }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ steps.resolve.outputs.resolved }}
+        cache: ${{ inputs.cache == 'true' && (inputs.package-manager == 'npm' && 'npm' || inputs.package-manager == 'pnpm' && 'pnpm' || inputs.package-manager == 'yarn' && 'yarn') || '' }}
+        cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+    - name: Setup Python
+      if: ${{ inputs.language == 'python' }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ steps.resolve.outputs.resolved }}
+        cache: ${{ inputs.cache == 'true' && 'pip' || '' }}
+        cache-dependency-path: ${{ inputs.working-directory }}/requirements*.txt
+    - name: Setup Java
+      if: ${{ inputs.language == 'java' }}
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: ${{ steps.resolve.outputs.resolved }}
+        cache: ${{ inputs.cache == 'true' && (inputs.java-build-tool == 'gradle' && 'gradle' || 'maven') || '' }}
+    - id: out
+      shell: bash
+      run: echo "resolved-version=${{ steps.resolve.outputs.resolved }}" >> "$GITHUB_OUTPUT"

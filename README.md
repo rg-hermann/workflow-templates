@@ -23,6 +23,12 @@ reusable-callers/                 # Exemplos de uso chamando os reusables
 | `_reusable/ci-python.yaml` | CI Python (install, lint, test, pip-audit opcional) | `python-version`, `lint-command`, `test-command`, `run-pip-audit` |
 | `_reusable/ci-java.yaml` | CI Java (Maven/Gradle, JUnit artifacts, JaCoCo opcional, dependency review, CodeQL opcional) | `java-version`, `build-tool`, `build-command`, `test-command`, `enable-coverage`, `run-codeql` |
 | `_reusable/ci-multilang.yaml` | CI unificado multi-linguagem (Node, Python, Java) via matriz | `languages`, `node-version`, `python-version`, `java-version`, `enable-coverage`, `run-tests` |
+
+### Composite Actions
+
+| Caminho | Descrição |
+|---------|-----------|
+| `.github/actions/setup-runtime` | Configuração unificada de runtime (Node/Python/Java) com cache opcional |
 ## Release Automático
 ```
 jobs:

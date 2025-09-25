@@ -139,8 +139,8 @@ Adicionar linhas relevantes ao `$GITHUB_STEP_SUMMARY` para facilitar debugging s
 6. Taggear release após merge se mudança relevante (futuro: automação). 
 
 ### 17. Roadmap Interno (resumido)
-- Unificar multi-linguagem com matriz.
-- Composite action para setup genérico (`setup-runtime`).
+- Refino do multi-linguagem usando composite de testes padronizados.
+- Expandir composite `setup-runtime` para incluir cache de ferramentas extras (ex: Poetry, Gradle wrapper hash, pnpm store).
 - Coverage reports padronizados (ex: convergir para cobertura em SARIF / summary).
 - Escanear com Trivy / Semgrep (opcionais).
 
