@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -47,21 +47,28 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "Validando parsing YAML via yq (rápido)" >> $GITHUB_STEP_SUMMARY
-          pip install --quiet yq >/dev/null 2>&1 || true
-          for f in $(git ls-files '.github/workflows/*.yml' '.github/workflows/*.yaml' '.github/workflows/_reusable/*.yml' '.github/workflows/_reusable/*.yaml' 2>/dev/null); do
-            python - <<'PY'
-            import sys, yaml, pathlib
-            for path in sys.argv[1:]:
-                try:
-                    yaml.safe_load(open(path))
-                except Exception as e:
-                    print(f"YAML inválido: {path}: {e}", file=sys.stderr)
-                    sys.exit(1)
+          echo "Validando parsing YAML via PyYAML" >> "$GITHUB_STEP_SUMMARY"
+          # Coleta de arquivos alvo
+          FILES=$(git ls-files '.github/workflows/*.yml' '.github/workflows/*.yaml' '.github/workflows/_reusable/*.yml' '.github/workflows/_reusable/*.yaml' 2>/dev/null || true)
+          if [ -z "$FILES" ]; then
+            echo "Nenhum arquivo YAML encontrado para validar" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          pip install --quiet PyYAML >/dev/null 2>&1 || true
+          for f in $FILES; do
+            python - <<'PY' "$f"
+            import sys, yaml
+            path = sys.argv[1]
+            try:
+                with open(path, 'r', encoding='utf-8') as fh:
+                    yaml.safe_load(fh)
+            except Exception as e:
+                print(f"YAML inválido: {path}: {e}", file=sys.stderr)
+                sys.exit(1)
             PY
-            echo "✔ $f" >> $GITHUB_STEP_SUMMARY
+            echo "✔ $f" >> "$GITHUB_STEP_SUMMARY"
           done
-          echo "Validação básica de YAML concluída" >> $GITHUB_STEP_SUMMARY
+          echo "Validação básica de YAML concluída" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Summary
         if: always()
