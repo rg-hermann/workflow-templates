@@ -132,10 +132,14 @@ jobs:
             echo 'clippy component not installed; installing...'\
             && rustup component add clippy
           fi
-          EXTRA=""
-          if [ "${{ inputs.deny-warnings }}" = "true" ]; then EXTRA="-D warnings"; fi
-          echo "Running cargo clippy $EXTRA" | tee -a "$GITHUB_STEP_SUMMARY"
-          cargo clippy --all-targets --all-features --no-deps -- $EXTRA
+          # Build clippy extra flags using an array to avoid word-splitting issues (ShellCheck SC2086)
+          CLIPPY_ARGS=(--all-targets --all-features --no-deps --)
+          if [ "${{ inputs.deny-warnings }}" = "true" ]; then
+            # Append as two separate items (-D warnings)
+            CLIPPY_ARGS+=( -D warnings )
+          fi
+          echo "Running cargo clippy ${CLIPPY_ARGS[*]}" | tee -a "$GITHUB_STEP_SUMMARY"
+          cargo clippy "${CLIPPY_ARGS[@]}"
 
       - name: Format check
         if: ${{ inputs.run-format-check }}
@@ -167,7 +171,7 @@ jobs:
           CODE=$?
           set -e
           echo "exit-code=$CODE" >> "$GITHUB_OUTPUT"
-          if [ $CODE -ne 0 ]; then
+          if [ "$CODE" -ne 0 ]; then
             echo 'Vulnerabilities detected' >> "$GITHUB_STEP_SUMMARY"
             if [ "${{ inputs.fail-on-audit }}" = "true" ]; then
               echo 'Failing due to fail-on-audit=true' >&2
@@ -197,7 +201,7 @@ jobs:
           set +e
           cargo tarpaulin --timeout ${{ inputs.coverage-timeout }} --out Xml --workspace --ignore-tests || EXIT=$?
           set -e
-          : "${EXIT:=0}"; if [ $EXIT -ne 0 ]; then echo "Tarpaulin exited with $EXIT" >> "$GITHUB_STEP_SUMMARY"; fi
+          : "${EXIT:=0}"; if [ "${EXIT}" -ne 0 ]; then echo "Tarpaulin exited with ${EXIT}" >> "$GITHUB_STEP_SUMMARY"; fi
           if [ -f tarpaulin-report.xml ]; then
             echo 'Coverage report generated' >> "$GITHUB_STEP_SUMMARY"
           else
@@ -215,10 +219,12 @@ jobs:
       - name: Summary
         if: always()
         run: |
-          echo "### Rust CI Summary" >> "$GITHUB_STEP_SUMMARY"
-          echo "Toolchain: ${{ inputs.rust-toolchain }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "Clippy: ${{ inputs.run-clippy }} (deny-warnings=${{ inputs.deny-warnings }})" >> "$GITHUB_STEP_SUMMARY"
-          echo "Fmt check: ${{ inputs.run-format-check }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "Tests: ${{ inputs.run-tests }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "Audit: ${{ inputs.run-audit }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "Coverage: ${{ inputs.enable-coverage }}" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### Rust CI Summary"
+            echo "Toolchain: ${{ inputs.rust-toolchain }}"
+            echo "Clippy: ${{ inputs.run-clippy }} (deny-warnings=${{ inputs.deny-warnings }})"
+            echo "Fmt check: ${{ inputs.run-format-check }}"
+            echo "Tests: ${{ inputs.run-tests }}"
+            echo "Audit: ${{ inputs.run-audit }}"
+            echo "Coverage: ${{ inputs.enable-coverage }}"
+          } >> "$GITHUB_STEP_SUMMARY"
