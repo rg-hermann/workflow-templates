@@ -1,0 +1,73 @@
+name: Reusable Python CI
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        type: string
+        required: false
+        default: '3.11'
+      install-command:
+        type: string
+        required: false
+        default: 'pip install -r requirements.txt'
+      test-command:
+        type: string
+        required: false
+        default: 'pytest -q'
+      lint-command:
+        type: string
+        required: false
+        default: 'flake8 .'
+      run-pip-audit:
+        type: boolean
+        required: false
+        default: false
+      working-directory:
+        type: string
+        required: false
+        default: '.'
+    secrets: {}
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+          cache: pip
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install dependencies
+        if: ${{ inputs.install-command != '' }}
+        run: ${{ inputs.install-command }}
+
+      - name: Lint
+        if: ${{ inputs.lint-command != '' }}
+        run: |
+          pip install flake8 >/dev/null 2>&1 || true
+          ${{ inputs.lint-command }}
+        shell: bash
+
+      - name: Run tests
+        if: ${{ inputs.test-command != '' }}
+        run: ${{ inputs.test-command }}
+
+      - name: pip-audit (advisories)
+        if: ${{ inputs.run-pip-audit }}
+        run: |
+          pip install pip-audit
+          pip-audit || true

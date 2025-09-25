@@ -31,6 +31,19 @@ on:
       subscription-id:
         required: false
         type: string
+      working-directory:
+        required: false
+        type: string
+        default: '.'
+        description: Project path
+      package-artifact-name:
+        required: false
+        type: string
+        default: 'node-app'
+        description: Artifact name for build output
+    secrets:
+      AZURE_CREDENTIALS:
+        required: false
 
 jobs:
   build:
@@ -45,6 +58,8 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: ${{ inputs.node-version }}
+          cache: 'npm'
+          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
 
       - name: Get npm cache directory
         id: npm-cache-dir
@@ -59,25 +74,29 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node-
 
-      - name: npm ci
+      - name: Install dependencies
+        working-directory: ${{ inputs.working-directory }}
         run: npm ci
 
       - name: Build
         if: ${{ inputs.build-command != '' }}
+        working-directory: ${{ inputs.working-directory }}
         run: ${{ inputs.build-command }}
 
       - name: Test
         if: ${{ inputs.test-command != '' }}
+        working-directory: ${{ inputs.working-directory }}
         run: ${{ inputs.test-command }}
 
       - name: Zip artifact for deployment
-        run: zip release.zip ./* -r
+        run: zip -r release.zip .
+        working-directory: ${{ inputs.working-directory }}
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
-          name: node-app
-          path: release.zip
+          name: ${{ inputs.package-artifact-name }}
+          path: ${{ inputs.working-directory }}/release.zip
 
   deploy:
     runs-on: ubuntu-latest
@@ -90,15 +109,18 @@ jobs:
       - name: Download artifact from build job
         uses: actions/download-artifact@v4
         with:
-          name: node-app
+          name: ${{ inputs.package-artifact-name }}
 
       - name: Unzip artifact for deployment
         run: unzip release.zip
       
-      - name: Login to Azure
+      - name: Login to Azure (OIDC or Service Principal)
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ inputs.client-id }}
+          tenant-id: ${{ inputs.tenant-id }}
+          subscription-id: ${{ inputs.subscription-id }}
 
 
       - name: 'Deploy to Azure Web App'

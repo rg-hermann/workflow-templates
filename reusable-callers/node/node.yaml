@@ -13,7 +13,7 @@ on:
 
 jobs:
   node-ci:
-    uses: rg-hermann/workflow-templates/.github/workflows/ci-node.yaml@latest
+    uses: rg-hermann/workflow-templates/.github/workflows/ci-node.yaml@main
     with:
       node-version: '18'
       install-command: 'npm ci'
